@@ -2,6 +2,8 @@
 
 Respectify-powered commenting for Astro. Drop in AI moderation, spam filtering, and a polished comment UX in minutes.
 
+Respectify does more than just comment moderation — it provides a complete solution for managing and enhancing user-generated content. It monitors for tone, logical fallacies, and spam and educates commenters on how to improve their comments.
+
 Built for production — powers [nickhodges.com](https://nickhodges.com) as a live Respectify demo.
 
 - **NPM:** https://www.npmjs.com/package/@respectify/astro
