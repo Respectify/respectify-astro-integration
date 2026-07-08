@@ -24,6 +24,8 @@ Built for production — powers [nickhodges.com](https://nickhodges.com) as a li
 - [`@astrojs/db`](https://docs.astro.build/en/guides/astro-db/) configured with Turso for production
 - A [Respectify](https://respectify.ai) account (`RESPECTIFY_EMAIL` + `RESPECTIFY_API_KEY`)
 
+> Prefer API-only moderation without Astro DB / comment UI? Use [`@respectify/client`](https://www.npmjs.com/package/@respectify/client) instead. See [Choose your TypeScript path](https://respectify.ai/comment-moderation-api#paths).
+
 ## Quick start
 
 ### 1. Install
