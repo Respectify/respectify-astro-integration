@@ -1,0 +1,133 @@
+---
+interface Props {
+  postSlug: string;
+}
+
+const { postSlug } = Astro.props;
+---
+
+<div class="rf-comments__form-panel">
+  <h3 class="rf-comments__form-title">Leave a Comment</h3>
+  <p class="rf-comments__form-note">
+    Your comment will be reviewed by <a href="https://respectify.ai" rel="noopener noreferrer" target="_blank">Respectify</a> before it appears.
+  </p>
+
+  <form class="rf-comments__form" data-post-slug={postSlug} id="rf-comment-form">
+    <div class="rf-comments__field">
+      <label class="rf-comments__label" for="rf-author">
+        Name <span class="rf-comments__required">*</span>
+      </label>
+      <input class="rf-comments__input" id="rf-author" maxlength="100" name="author" required type="text" />
+    </div>
+
+    <div class="rf-comments__field">
+      <label class="rf-comments__label" for="rf-email">Email (optional, not public)</label>
+      <input class="rf-comments__input" id="rf-email" name="email" type="email" />
+    </div>
+
+    <div class="rf-comments__field">
+      <label class="rf-comments__label" for="rf-content">
+        Comment <span class="rf-comments__required">*</span>
+      </label>
+      <textarea class="rf-comments__textarea" id="rf-content" maxlength="5000" name="content" required rows="5"></textarea>
+    </div>
+
+    <button class="rf-comments__submit" id="rf-submit-button" type="submit">
+      <span id="rf-button-text">Submit Comment</span>
+      <svg aria-hidden="true" class="rf-comments__spinner" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" fill="none" r="10" stroke="currentColor" stroke-width="4" style="opacity:0.25"></circle>
+        <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor" style="opacity:0.75"></path>
+      </svg>
+    </button>
+
+    <div class="rf-comments__message rf-comments__hidden" id="rf-form-message" role="status"></div>
+  </form>
+</div>
+
+<script>
+  import { actions } from 'astro:actions';
+
+  function createTextDiv(text: string, className: string): HTMLDivElement {
+    const div = document.createElement('div');
+    div.className = className;
+    div.textContent = text;
+    return div;
+  }
+
+  const form = document.getElementById('rf-comment-form') as HTMLFormElement | null;
+  const messageEl = document.getElementById('rf-form-message');
+  const submitButton = document.getElementById('rf-submit-button') as HTMLButtonElement | null;
+  const buttonText = document.getElementById('rf-button-text');
+
+  if (form && messageEl && submitButton && buttonText) {
+    const postSlug = form.dataset.postSlug || '';
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      submitButton.disabled = true;
+      submitButton.classList.add('rf-comments__submit--analyzing');
+      buttonText.textContent = 'Analyzing with Respectify AI...';
+
+      const formData = new FormData(form);
+
+      try {
+        const { data, error } = await actions.comments.submit({
+          postSlug,
+          author: formData.get('author') as string,
+          email: (formData.get('email') as string) || undefined,
+          content: formData.get('content') as string,
+        });
+
+        messageEl.classList.remove('rf-comments__hidden', 'rf-comments__message--success', 'rf-comments__message--warning', 'rf-comments__message--error');
+        messageEl.replaceChildren();
+
+        if (error) {
+          messageEl.classList.add('rf-comments__message--error');
+          messageEl.appendChild(createTextDiv('An error occurred. Please try again.', 'rf-comments__message-title'));
+          messageEl.classList.remove('rf-comments__hidden');
+          return;
+        }
+
+        if (data.approved) {
+          messageEl.classList.add('rf-comments__message--success');
+          messageEl.appendChild(createTextDiv(`✓ ${data.message}`, 'rf-comments__message-title'));
+          messageEl.appendChild(createTextDiv(data.feedback, 'rf-comments__message-body'));
+          if (data.score !== undefined) {
+            messageEl.appendChild(createTextDiv(`Respectfulness score: ${(data.score * 100).toFixed(0)}%`, 'rf-comments__message-score'));
+          }
+          form.reset();
+          window.dispatchEvent(new CustomEvent('respectify:comment-published', { detail: { postSlug } }));
+        } else {
+          messageEl.classList.add('rf-comments__message--warning');
+          messageEl.appendChild(createTextDiv('Comment needs improvement', 'rf-comments__message-title'));
+          messageEl.appendChild(createTextDiv(data.feedback || 'Your comment did not meet our respectfulness standards.', 'rf-comments__message-body'));
+
+          if (data.suggestion) {
+            const suggestionBox = document.createElement('div');
+            suggestionBox.className = 'rf-comments__suggestion';
+            suggestionBox.appendChild(createTextDiv('Suggestion:', 'rf-comments__suggestion-label'));
+            suggestionBox.appendChild(createTextDiv(data.suggestion, 'rf-comments__suggestion-text'));
+            messageEl.appendChild(suggestionBox);
+          }
+
+          if (data.score !== undefined) {
+            messageEl.appendChild(createTextDiv(`Respectfulness score: ${(data.score * 100).toFixed(0)}%`, 'rf-comments__message-score'));
+          }
+
+          messageEl.appendChild(createTextDiv('Please revise your comment and try again.', 'rf-comments__message-footer'));
+        }
+
+        messageEl.classList.remove('rf-comments__hidden');
+      } catch {
+        messageEl.classList.remove('rf-comments__hidden');
+        messageEl.classList.add('rf-comments__message--error');
+        messageEl.replaceChildren(createTextDiv('An error occurred. Please try again.', 'rf-comments__message-title'));
+      } finally {
+        submitButton.disabled = false;
+        submitButton.classList.remove('rf-comments__submit--analyzing');
+        buttonText.textContent = 'Submit Comment';
+      }
+    });
+  }
+</script>

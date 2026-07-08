@@ -1,35 +1,193 @@
 # @respectify/astro
 
-Official Respectify integration for Astro.
+Respectify-powered commenting for Astro. Drop in AI moderation, spam filtering, and a polished comment UX in minutes.
 
-## Installation
+Built for production — powers [nickhodges.com](https://nickhodges.com) as a live Respectify demo.
+
+- **NPM:** https://www.npmjs.com/package/@respectify/astro
+- **Repository:** https://github.com/Respectify/respectify-astro-integration
+- **Product site:** https://respectify.ai
+
+## Features
+
+- **Respectify AI moderation** — spam detection, toxicity scoring, fallacy detection, revision suggestions
+- **Works with prerendered pages** — comments load at runtime via API; no rebuild needed
+- **One component** — `<CommentSection postSlug="..." />`
+- **Powered by Respectify branding** — optional callout and badge for demos
+- **Astro DB storage** — Turso/libSQL via `@astrojs/db`
+- **Self-contained CSS** — no Tailwind required; customize via CSS variables
+- **Fail-closed** — rejects comments when Respectify is unavailable
+
+## Requirements
+
+- Astro 5 or 6 with **`output: 'server'`** (or hybrid) and a server adapter (Vercel, Node, etc.)
+- [`@astrojs/db`](https://docs.astro.build/en/guides/astro-db/) configured with Turso for production
+- A [Respectify](https://respectify.ai) account (`RESPECTIFY_EMAIL` + `RESPECTIFY_API_KEY`)
+
+## Quick start
+
+### 1. Install
 
 ```bash
-npm install @respectify/astro
+npm install @respectify/astro @respectify/client @astrojs/db
 ```
 
-## Usage
+### 2. Add the integration
 
 ```ts
-// astro.config.mjs
-import { defineConfig } from "astro/config";
-import respectify from "@respectify/astro";
+// astro.config.ts
+import { defineConfig } from 'astro/config';
+import db from '@astrojs/db';
+import respectify from '@respectify/astro';
 
 export default defineConfig({
+  site: 'https://yoursite.com',
+  output: 'server',
+  adapter: vercel(), // or node, netlify, etc.
   integrations: [
+    db(),
     respectify({
-      mode: "perspective-compatible"
-    })
-  ]
+      // Optional: customize post URL for Respectify topic context
+      getPostUrl: (slug, site) => `${site}/blog/${slug}/`,
+    }),
+  ],
 });
 ```
 
-## Options
+### 3. Configure Respectify
 
-- `mode`: `"perspective-compatible"` or `"full-moderation"` (default: `"perspective-compatible"`)
-- `publicKey`: optional public key string exposed through Vite define
+Copy the default config to your project root:
 
-## Links
+```bash
+cp node_modules/@respectify/astro/default-respectify.config.json ./respectify.config.json
+```
 
-- NPM: https://www.npmjs.com/package/@respectify/astro
-- Repository: https://github.com/Respectify/respectify-astro-integration
+Add environment variables:
+
+```env
+RESPECTIFY_EMAIL=you@example.com
+RESPECTIFY_API_KEY=your-api-key
+ASTRO_DB_REMOTE_URL=libsql://...
+ASTRO_DB_APP_TOKEN=...
+```
+
+### 4. Add the database table
+
+Copy this into `db/config.ts` (or import from `@respectify/astro/schema` if your setup supports it):
+
+```ts
+import { defineDb, defineTable, column, NOW } from 'astro:db';
+
+const Comment = defineTable({
+  columns: {
+    id: column.number({ primaryKey: true }),
+    postSlug: column.text(),
+    author: column.text(),
+    email: column.text({ optional: true }),
+    content: column.text(),
+    createdAt: column.date({ default: NOW }),
+    approved: column.boolean({ default: false }),
+    parentId: column.number({ optional: true }),
+  },
+  indexes: [
+    { on: ['postSlug'], unique: false },
+    { on: ['approved'], unique: false },
+  ],
+});
+
+export default defineDb({ tables: { Comment } });
+```
+
+Or use the exported helper:
+
+```ts
+import { defineDb } from 'astro:db';
+import { Comment } from '@respectify/astro/schema';
+
+export default defineDb({ tables: { Comment } });
+```
+
+Run migrations:
+
+```bash
+npx astro db push
+```
+
+### 5. Wire up Astro Actions
+
+```ts
+// src/actions/index.ts
+import { respectifyCommentActions } from '@respectify/astro/actions';
+
+export const server = {
+  comments: respectifyCommentActions,
+};
+```
+
+### 6. Add comments to your layout
+
+```astro
+---
+import CommentSection from '@respectify/astro/components/CommentSection.astro';
+---
+
+<CommentSection postSlug={post.id} />
+```
+
+That's it. Comments are moderated by Respectify before they appear.
+
+## Component props
+
+| Prop | Default | Description |
+|------|---------|-------------|
+| `postSlug` | required | Unique identifier for the page |
+| `apiPath` | `/api/respectify/comments` | Comments API path (must match integration) |
+| `showBranding` | `true` | Show Powered by Respectify callout |
+| `enableDelete` | `false` | Show delete controls when admin is authenticated |
+| `class` | — | Extra CSS class on root wrapper |
+
+## Customization
+
+### CSS variables
+
+Override on `.rf-comments`:
+
+```css
+.rf-comments {
+  --rf-accent: #2bbc89;
+  --rf-accent-hover: #24966f;
+  --rf-radius: 0.75rem;
+}
+```
+
+### Integration options
+
+```ts
+respectify({
+  configPath: './respectify.config.json',
+  commentsApiPath: '/api/respectify/comments',
+  showBranding: true,
+  getPostUrl: (slug, site) => `${site}/posts/${slug}/`,
+  rateLimit: { windowMs: 300_000, maxRequests: 10 },
+});
+```
+
+### Admin delete (optional)
+
+Set `enableDelete` on `CommentSection` and implement auth so `context.locals.isAuthenticated` is true. See the [Nick-Blog](https://github.com/NickHodges/Nick-Blog) repo for a full admin auth example.
+
+## How it works
+
+```text
+Visitor submits comment
+  → Astro Action (comments.submit)
+  → Respectify megacall (spam + respectfulness)
+  → If approved: save to Astro DB
+  → Client refreshes comment list via GET /api/respectify/comments
+```
+
+Post pages can stay `prerender = true`. Only the API route and actions need server runtime.
+
+## License
+
+MIT

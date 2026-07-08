@@ -1,0 +1,41 @@
+---
+import '@respectify/astro/styles.css';
+import PoweredByRespectify from './PoweredByRespectify.astro';
+import CommentList from './CommentList.astro';
+import CommentForm from './CommentForm.astro';
+
+interface Props {
+  /** Unique identifier for the page/post (e.g. blog slug) */
+  postSlug: string;
+  /** API path injected by the integration (default: /api/respectify/comments) */
+  apiPath?: string;
+  /** Show Powered by Respectify branding (default: true) */
+  showBranding?: boolean;
+  /** Enable admin delete controls when authenticated (default: false) */
+  enableDelete?: boolean;
+  /** Optional CSS class on the root wrapper */
+  class?: string;
+  /** Inline styles (e.g. CSS variable overrides) */
+  style?: string;
+}
+
+const {
+  postSlug,
+  apiPath = '/api/respectify/comments',
+  showBranding = true,
+  enableDelete = false,
+  class: className,
+  style,
+} = Astro.props;
+---
+
+<div class:list={['rf-comments', className]} style={style}>
+  {showBranding && <PoweredByRespectify variant="callout" />}
+  <CommentList postSlug={postSlug} apiPath={apiPath} enableDelete={enableDelete} />
+  <CommentForm postSlug={postSlug} />
+  {showBranding && (
+    <div style="display: flex; justify-content: flex-end;">
+      <PoweredByRespectify variant="badge" />
+    </div>
+  )}
+</div>

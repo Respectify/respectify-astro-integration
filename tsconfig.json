@@ -1,13 +1,11 @@
 {
+  "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "rootDir": ".",
+    "outDir": "./dist",
     "declaration": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "strict": true,
-    "skipLibCheck": true
+    "declarationMap": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "client/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
 }

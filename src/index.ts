@@ -1,34 +1,34 @@
-import type { AstroIntegration } from "astro";
+import type { AstroIntegration } from 'astro';
+import { envField } from 'astro/config';
+import { setIntegrationOptions } from './runtime-config';
+import type { RespectifyIntegrationOptions } from './types';
 
-export interface RespectifyIntegrationOptions {
-  /**
-   * Optional public key that client code can reference.
-   */
-  publicKey?: string;
-  /**
-   * Default moderation mode.
-   */
-  mode?: "perspective-compatible" | "full-moderation";
-}
+export default function respectify(userOptions: RespectifyIntegrationOptions = {}): AstroIntegration {
+  setIntegrationOptions(userOptions);
 
-export default function respectify(
-  options: RespectifyIntegrationOptions = {}
-): AstroIntegration {
+  const commentsApiPath = userOptions.commentsApiPath ?? '/api/respectify/comments';
+  const routePattern = commentsApiPath.replace(/^\//, '');
+
   return {
-    name: "@respectify/astro",
+    name: '@respectify/astro',
     hooks: {
-      "astro:config:setup": ({ updateConfig }) => {
+      'astro:config:setup': ({ injectRoute, updateConfig }) => {
         updateConfig({
-          vite: {
-            define: {
-              __RESPECTIFY_MODE__: JSON.stringify(
-                options.mode ?? "perspective-compatible"
-              ),
-              __RESPECTIFY_PUBLIC_KEY__: JSON.stringify(options.publicKey ?? "")
-            }
-          }
+          env: {
+            schema: {
+              RESPECTIFY_EMAIL: envField.string({ context: 'server', access: 'secret' }),
+              RESPECTIFY_API_KEY: envField.string({ context: 'server', access: 'secret' }),
+            },
+          },
         });
-      }
-    }
+
+        injectRoute({
+          pattern: routePattern,
+          entrypoint: '@respectify/astro/routes/comments',
+        });
+      },
+    },
   };
 }
+
+export type { RespectifyIntegrationOptions, RespectifyAnalysisResult } from './types';

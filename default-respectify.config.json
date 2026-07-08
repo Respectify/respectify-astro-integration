@@ -1,0 +1,19 @@
+{
+  "$schema": "./respectify.schema.json",
+  "enabled": true,
+  "moderation": {
+    "blockDisrespectful": true,
+    "showFeedbackToUser": true,
+    "allowOverride": false
+  },
+  "thresholds": {
+    "autoApprove": 0.7,
+    "warn": 0.5,
+    "block": 0.3
+  },
+  "feedback": {
+    "approved": "Thank you for your respectful comment!",
+    "warning": "Your comment may contain disrespectful language. Please consider revising it.",
+    "blocked": "Your comment does not meet our respectfulness standards. Please revise and try again."
+  }
+}

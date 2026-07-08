@@ -1,0 +1,119 @@
+---
+interface Props {
+  postSlug: string;
+  apiPath?: string;
+  enableDelete?: boolean;
+}
+
+const { postSlug, apiPath = '/api/respectify/comments', enableDelete = false } = Astro.props;
+---
+
+<section class="rf-comments__section" data-api-path={apiPath} data-enable-delete={String(enableDelete)} data-post-slug={postSlug}>
+  <h3 class="rf-comments__heading">
+    Comments (<span class="rf-comments__count">…</span>)
+  </h3>
+
+  <p class="rf-comments__loading">Loading comments…</p>
+  <div class="rf-comments__list rf-comments__hidden"></div>
+  <p class="rf-comments__empty rf-comments__hidden">No comments yet. Be the first to comment!</p>
+</section>
+
+<script define:vars={{ apiPath, enableDelete }}>
+  import { actions } from 'astro:actions';
+  import { fetchComments, renderCommentHtml } from '@respectify/astro/client';
+
+  async function checkAuthForDelete() {
+    if (!enableDelete) return false;
+    try {
+      const response = await fetch('/api/auth-status');
+      if (!response.ok) return false;
+      const data = await response.json();
+      return Boolean(data.isAuthenticated);
+    } catch {
+      return false;
+    }
+  }
+
+  function setupDeleteControls() {
+    document.querySelectorAll('.rf-comments__delete-controls').forEach((group) => {
+      if (group.getAttribute('data-delete-bound') === 'true') return;
+      group.setAttribute('data-delete-bound', 'true');
+      group.classList.add('rf-comments__delete-controls--visible');
+
+      const deleteBtn = group.querySelector('.rf-comments__delete-btn:not(.confirm-delete-btn)') ;
+      const confirmBtn = group.querySelector('.confirm-delete-btn');
+      const cancelBtn = group.querySelector('.cancel-delete-btn');
+      const confirmSpan = group.querySelector('.rf-comments__delete-confirm');
+
+      deleteBtn?.addEventListener('click', () => {
+        deleteBtn.classList.add('rf-comments__hidden');
+        confirmSpan?.classList.add('rf-comments__delete-confirm--visible');
+      });
+
+      cancelBtn?.addEventListener('click', () => {
+        confirmSpan?.classList.remove('rf-comments__delete-confirm--visible');
+        deleteBtn?.classList.remove('rf-comments__hidden');
+      });
+
+      confirmBtn?.addEventListener('click', async () => {
+        const commentId = parseInt(confirmBtn.getAttribute('data-comment-id') || '0', 10);
+        if (!commentId) return;
+
+        const { error } = await actions.comments.delete({ commentId });
+        if (error) return;
+
+        document.querySelector(`[data-comment-id="${commentId}"]`)?.remove();
+        const section = document.querySelector('.rf-comments__section');
+        const countEl = section?.querySelector('.rf-comments__count');
+        if (countEl) {
+          countEl.textContent = String(Math.max(parseInt(countEl.textContent || '0', 10) - 1, 0));
+        }
+      });
+    });
+  }
+
+  async function loadComments(section) {
+    const postSlug = section.dataset.postSlug || '';
+    const path = section.dataset.apiPath || apiPath;
+    const loadingEl = section.querySelector('.rf-comments__loading');
+    const listEl = section.querySelector('.rf-comments__list');
+    const emptyEl = section.querySelector('.rf-comments__empty');
+    const countEl = section.querySelector('.rf-comments__count');
+
+    try {
+      const isAdmin = await checkAuthForDelete();
+      const comments = await fetchComments(path, postSlug);
+
+      loadingEl?.classList.add('rf-comments__hidden');
+      if (countEl) countEl.textContent = String(comments.length);
+
+      if (comments.length === 0) {
+        emptyEl?.classList.remove('rf-comments__hidden');
+        return;
+      }
+
+      if (listEl) {
+        listEl.innerHTML = comments.map((c) => renderCommentHtml(c, { showDelete: isAdmin })).join('');
+        listEl.classList.remove('rf-comments__hidden');
+      }
+
+      if (isAdmin) setupDeleteControls();
+    } catch {
+      if (loadingEl) loadingEl.textContent = 'Unable to load comments.';
+    }
+  }
+
+  const section = document.querySelector('.rf-comments__section');
+  if (section) {
+    loadComments(section);
+
+    window.addEventListener('respectify:comment-published', (event) => {
+      const detail = event.detail;
+      if (detail?.postSlug === section.dataset.postSlug) {
+        section.querySelector('.rf-comments__empty')?.classList.add('rf-comments__hidden');
+        section.querySelector('.rf-comments__list')?.classList.remove('rf-comments__hidden');
+        loadComments(section);
+      }
+    });
+  }
+</script>
