@@ -1,0 +1,44 @@
+{
+  "name": "@respectify/astro",
+  "version": "0.1.0",
+  "description": "Official Respectify integration for Astro sites.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://www.npmjs.com/package/@respectify/astro",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Respectify/respectify-astro-integration.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Respectify/respectify-astro-integration/issues"
+  },
+  "keywords": [
+    "astro",
+    "astro-integration",
+    "respectify",
+    "moderation"
+  ],
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "astro": "^5.0.0"
+  },
+  "devDependencies": {
+    "astro": "^5.16.5",
+    "typescript": "^5.9.2"
+  }
+}
