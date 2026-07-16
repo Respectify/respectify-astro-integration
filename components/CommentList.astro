@@ -18,12 +18,13 @@ const { postSlug, apiPath = '/api/respectify/comments', enableDelete = false } =
   <p class="rf-comments__empty rf-comments__hidden">No comments yet. Be the first to comment!</p>
 </section>
 
-<script define:vars={{ apiPath, enableDelete }}>
+<script>
   import { actions } from 'astro:actions';
   import { fetchComments, renderCommentHtml } from '@respectify/astro/client';
 
   async function checkAuthForDelete() {
-    if (!enableDelete) return false;
+    const section = document.querySelector('.rf-comments__section');
+    if (section?.dataset.enableDelete !== 'true') return false;
     try {
       const response = await fetch('/api/auth-status');
       if (!response.ok) return false;
@@ -74,7 +75,7 @@ const { postSlug, apiPath = '/api/respectify/comments', enableDelete = false } =
 
   async function loadComments(section) {
     const postSlug = section.dataset.postSlug || '';
-    const path = section.dataset.apiPath || apiPath;
+    const path = section.dataset.apiPath;
     const loadingEl = section.querySelector('.rf-comments__loading');
     const listEl = section.querySelector('.rf-comments__list');
     const emptyEl = section.querySelector('.rf-comments__empty');
