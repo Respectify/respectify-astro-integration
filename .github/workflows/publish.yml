@@ -1,14 +1,35 @@
 name: Publish to npm
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.check.outputs.should_publish }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: check
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          PUBLISHED_VERSION="$(npm view @respectify/astro version 2>/dev/null || echo "none")"
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$PKG_VERSION" != "$PUBLISHED_VERSION" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
   publish:
+    needs: check
+    if: needs.check.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -25,13 +46,13 @@ jobs:
 
       - run: npm run typecheck
 
-      - name: Verify tag matches package.json version
-        run: |
-          PKG_VERSION="$(node -p "require('./package.json').version")"
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-            echo "Release tag ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
-            exit 1
-          fi
-
       - run: npm publish
+
+      - name: Tag and create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v${{ needs.check.outputs.version }}"
+          git tag "$VERSION"
+          git push origin "$VERSION"
+          gh release create "$VERSION" --title "$VERSION" --generate-notes
