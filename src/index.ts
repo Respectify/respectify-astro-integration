@@ -16,8 +16,8 @@ export default function respectify(userOptions: RespectifyIntegrationOptions = {
         updateConfig({
           env: {
             schema: {
-              RESPECTIFY_EMAIL: envField.string({ context: 'server', access: 'secret' }),
-              RESPECTIFY_API_KEY: envField.string({ context: 'server', access: 'secret' }),
+              RESPECTIFY_EMAIL: envField.string({ context: 'server', access: 'secret', optional: true }),
+              RESPECTIFY_API_KEY: envField.string({ context: 'server', access: 'secret', optional: true }),
             },
           },
         });

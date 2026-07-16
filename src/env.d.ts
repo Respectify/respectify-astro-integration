@@ -11,8 +11,8 @@ declare global {
 }
 
 declare module 'astro:env/server' {
-  export const RESPECTIFY_EMAIL: string;
-  export const RESPECTIFY_API_KEY: string;
+  export const RESPECTIFY_EMAIL: string | undefined;
+  export const RESPECTIFY_API_KEY: string | undefined;
 }
 
 declare module 'astro:db' {
