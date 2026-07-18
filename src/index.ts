@@ -31,4 +31,10 @@ export default function respectify(userOptions: RespectifyIntegrationOptions = {
   };
 }
 
-export type { RespectifyIntegrationOptions, RespectifyAnalysisResult } from './types';
+export type {
+  RespectifyIntegrationOptions,
+  RespectifyAnalysisResult,
+  RespectifyClientConfig,
+  RespectifyMegacallConfig,
+  AnalyzeCommentOptions,
+} from './types';

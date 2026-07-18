@@ -26,7 +26,13 @@ export const respectifyCommentActions = {
       parentId: z.number().optional(),
     }),
     handler: async ({ postSlug, author, email, content, parentId }) => {
-      const analysis = await analyzeComment(content, postSlug);
+      let replyToComment: string | undefined;
+      if (parentId !== undefined) {
+        const [parent] = await db.select().from(Comment).where(eq(Comment.id, parentId)).limit(1);
+        replyToComment = parent?.content;
+      }
+
+      const analysis = await analyzeComment(content, postSlug, { replyToComment });
 
       if (!analysis.approved) {
         return {

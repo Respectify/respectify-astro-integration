@@ -1,0 +1,151 @@
+// =============================================================================
+// Respectify Astro — sample config
+// =============================================================================
+//
+// Copy this file to your project root as `respectify.config.json` and trim
+// comments (JSON does not allow comments). Or keep a `.jsonc` copy for
+// reference and point the integration at a plain JSON file via `configPath`.
+//
+//   cp node_modules/@respectify/astro/respectify.config.sample.jsonc \
+//      ./respectify.config.json
+//
+// Values here merge with options passed to `respectify({ ... })` in
+// astro.config. Integration options win on conflicts for `client` / `megacall`.
+//
+// Credentials still come from env by default:
+//   RESPECTIFY_EMAIL
+//   RESPECTIFY_API_KEY
+//
+// Astro-only options (not in this file) go in astro.config:
+//   respectify({
+//     configPath: './respectify.config.json',
+//     commentsApiPath: '/api/respectify/comments',
+//     showBranding: true,
+//     getPostUrl: (slug, site) => `${site}/posts/${slug}/`,
+//     rateLimit: { windowMs: 300_000, maxRequests: 10 },
+//     client: { /* same shape as "client" below */ },
+//     megacall: { /* same shape as "megacall" below */ },
+//   })
+//
+// =============================================================================
+
+{
+  // Master switch. When false, comments skip the Respectify API and are
+  // auto-approved with `feedback.approved`.
+  "enabled": true,
+
+  // ---------------------------------------------------------------------------
+  // client — forwarded to RespectifyClient
+  // See: https://www.npmjs.com/package/@respectify/client
+  // ---------------------------------------------------------------------------
+  "client": {
+    // API base URL (default: https://app.respectify.ai)
+    "baseUrl": "https://app.respectify.ai",
+
+    // API version path segment (default: "0.2")
+    "version": "0.2",
+
+    // Request timeout in milliseconds (default: 30000)
+    "timeout": 30000,
+
+    // Optional website domain for license / usage tracking
+    "website": "yoursite.com"
+
+    // Optional credential overrides (prefer env vars in production):
+    // "email": "you@example.com",
+    // "apiKey": "your-api-key"
+  },
+
+  // ---------------------------------------------------------------------------
+  // megacall — forwarded to every Respectify megacall
+  // `comment` and `articleId` are set automatically by the integration.
+  // Replies also set `replyToComment` from the parent comment text.
+  // Relevance / comment score / dogwhistle require a topic (articleId); if
+  // topic init fails, those flags are dropped and only spam (if enabled) runs.
+  // ---------------------------------------------------------------------------
+  "megacall": {
+    // Spam detection (default: true)
+    "includeSpam": true,
+
+    // Toxicity / quality / fallacy scoring (default: true when a topic exists)
+    "includeCommentScore": true,
+
+    // On-topic + banned-topic analysis (requires topic / articleId)
+    "includeRelevance": false,
+
+    // Dogwhistle / coded-language detection (requires topic / articleId)
+    "includeDogwhistle": false,
+
+    // Topics that should fail the relevance check when discussed
+    "bannedTopics": [],
+
+    // Sensitive topics used to focus dogwhistle detection
+    "sensitiveTopics": [],
+
+    // Example dogwhistle phrases to help the model
+    "dogwhistleExamples": []
+
+    // Normally set per-request for replies — only set here if you want a fixed value:
+    // "replyToComment": "Parent comment text"
+  },
+
+  // ---------------------------------------------------------------------------
+  // moderation — how megacall results become approve / reject decisions
+  // ---------------------------------------------------------------------------
+  "moderation": {
+    // Block comments whose respectfulness score is below `thresholds.block`
+    "blockDisrespectful": true,
+
+    // Mid-band scores (between block and autoApprove): allow through with
+    // `feedback.warning` when true; otherwise treat like a soft reject path
+    "allowOverride": false,
+
+    // Include revision suggestions (toxicity explanation, fallacies, etc.)
+    // in the action response (default: true)
+    "showFeedbackToUser": true,
+
+    // When megacall.includeRelevance is true, reject off-topic comments or
+    // those matching bannedTopics (default: true)
+    "blockOffTopic": true,
+
+    // When megacall.includeDogwhistle is true, reject detected dogwhistles
+    // (default: true)
+    "blockDogwhistles": true
+  },
+
+  // ---------------------------------------------------------------------------
+  // thresholds — respectfulness score bands (0.0–1.0)
+  // Score is derived as `1 - toxicity_score` from comment_score when available.
+  // ---------------------------------------------------------------------------
+  "thresholds": {
+    // Score >= this → approve with `feedback.approved`
+    "autoApprove": 0.7,
+
+    // Reserved mid band (kept for compatibility; decisions use autoApprove/block)
+    "warn": 0.5,
+
+    // Score < this + blockDisrespectful → reject with `feedback.blocked`
+    "block": 0.3
+  },
+
+  // ---------------------------------------------------------------------------
+  // feedback — user-facing messages returned by the submit action
+  // ---------------------------------------------------------------------------
+  "feedback": {
+    "approved": "Thank you for your respectful comment!",
+    "warning": "Your comment may contain disrespectful language. Please consider revising it.",
+    "blocked": "Your comment does not meet our respectfulness standards. Please revise and try again.",
+
+    // Used when blockOffTopic rejects a comment (optional)
+    "offTopic": "This comment appears to be off-topic.",
+
+    // Used when blockDogwhistles rejects a comment (optional)
+    "dogwhistle": "This comment was blocked due to policy violations."
+  }
+
+  // ---------------------------------------------------------------------------
+  // Legacy (optional)
+  // ---------------------------------------------------------------------------
+  // Deprecated: use client.baseUrl instead. Still accepted and mapped to baseUrl.
+  // "apiEndpoint": "https://app.respectify.ai"
+}

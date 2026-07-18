@@ -60,11 +60,17 @@ export default defineConfig({
 
 ### 3. Configure Respectify
 
-Copy the default config to your project root:
+Copy a starter config to your project root:
 
 ```bash
+# Minimal defaults
 cp node_modules/@respectify/astro/default-respectify.config.json ./respectify.config.json
+
+# Or the fully commented sample (strip comments — JSON does not allow them)
+cp node_modules/@respectify/astro/respectify.config.sample.jsonc ./respectify.config.json
 ```
+
+See [`respectify.config.sample.jsonc`](./respectify.config.sample.jsonc) for every field and how it maps to `@respectify/client`.
 
 Add environment variables:
 
@@ -166,6 +172,8 @@ Override on `.rf-comments`:
 
 ### Integration options
 
+Any `@respectify/client` option can be set via `client` and `megacall`. Values in `astro.config` override the same keys in `respectify.config.json`.
+
 ```ts
 respectify({
   configPath: './respectify.config.json',
@@ -173,8 +181,35 @@ respectify({
   showBranding: true,
   getPostUrl: (slug, site) => `${site}/posts/${slug}/`,
   rateLimit: { windowMs: 300_000, maxRequests: 10 },
+
+  // Forwarded to RespectifyClient (email/apiKey still default from env)
+  client: {
+    baseUrl: 'https://app.respectify.ai',
+    timeout: 30_000,
+    version: '0.2',
+    website: 'yoursite.com',
+  },
+
+  // Forwarded to every megacall (comment + articleId are set automatically)
+  megacall: {
+    includeSpam: true,
+    includeCommentScore: true,
+    includeRelevance: true,
+    includeDogwhistle: true,
+    bannedTopics: ['spam-topics'],
+    sensitiveTopics: [],
+    dogwhistleExamples: [],
+  },
 });
 ```
+
+### `respectify.config.json`
+
+Moderation policy lives in the JSON file. You can also put `client` / `megacall` there (same shapes as above). Integration options win on conflicts.
+
+For a field-by-field walkthrough with comments, see [`respectify.config.sample.jsonc`](./respectify.config.sample.jsonc).
+
+Replies automatically pass the parent comment text as `replyToComment` to Respectify.
 
 ### Admin delete (optional)
 
@@ -185,7 +220,7 @@ Set `enableDelete` on `CommentSection` and implement auth so `context.locals.isA
 ```text
 Visitor submits comment
   → Astro Action (comments.submit)
-  → Respectify megacall (spam + respectfulness)
+  → Respectify megacall (configured checks: spam, score, relevance, dogwhistle, …)
   → If approved: save to Astro DB
   → Client refreshes comment list via GET /api/respectify/comments
 ```

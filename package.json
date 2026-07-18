@@ -1,6 +1,6 @@
 {
   "name": "@respectify/astro",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Respectify-powered commenting for Astro — AI moderation, spam filtering, and beautiful UX out of the box.",
   "type": "module",
   "license": "MIT",
@@ -42,6 +42,7 @@
     "components",
     "client",
     "default-respectify.config.json",
+    "respectify.config.sample.jsonc",
     "README.md"
   ],
   "peerDependencies": {
