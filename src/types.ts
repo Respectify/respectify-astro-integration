@@ -1,3 +1,17 @@
+import type { MegacallOptions, RespectifyClientOptions } from '@respectify/client';
+
+/**
+ * Options forwarded to `RespectifyClient`.
+ * Email and API key default to `RESPECTIFY_EMAIL` / `RESPECTIFY_API_KEY` env vars.
+ */
+export type RespectifyClientConfig = Partial<RespectifyClientOptions>;
+
+/**
+ * Options forwarded to every `megacall`.
+ * `comment` and `articleId` are set automatically by the integration.
+ */
+export type RespectifyMegacallConfig = Omit<MegacallOptions, 'comment' | 'articleId'>;
+
 export interface RespectifyIntegrationOptions {
   /** Path to respectify.config.json (default: ./respectify.config.json) */
   configPath?: string;
@@ -16,6 +30,24 @@ export interface RespectifyIntegrationOptions {
     windowMs: number;
     maxRequests: number;
   };
+
+  /**
+   * Options forwarded to the Respectify API client
+   * (`baseUrl`, `timeout`, `version`, `website`, optional credential overrides).
+   */
+  client?: RespectifyClientConfig;
+
+  /**
+   * Options forwarded to every Respectify megacall
+   * (`includeSpam`, `includeRelevance`, `includeCommentScore`, `includeDogwhistle`,
+   * `bannedTopics`, `sensitiveTopics`, `dogwhistleExamples`, `replyToComment`).
+   */
+  megacall?: RespectifyMegacallConfig;
+}
+
+export interface AnalyzeCommentOptions {
+  /** Parent comment text when submitting a reply */
+  replyToComment?: string;
 }
 
 export interface RespectifyAnalysisResult {

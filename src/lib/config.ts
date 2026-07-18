@@ -2,9 +2,35 @@ import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 import { getIntegrationOptions } from '../runtime-config';
+import type { RespectifyClientConfig, RespectifyMegacallConfig } from '../types';
+
+const MegacallConfigSchema = z
+  .object({
+    includeSpam: z.boolean().optional(),
+    includeRelevance: z.boolean().optional(),
+    includeCommentScore: z.boolean().optional(),
+    includeDogwhistle: z.boolean().optional(),
+    bannedTopics: z.array(z.string()).optional(),
+    sensitiveTopics: z.array(z.string()).optional(),
+    dogwhistleExamples: z.array(z.string()).optional(),
+    replyToComment: z.string().optional(),
+  })
+  .optional();
+
+const ClientConfigSchema = z
+  .object({
+    baseUrl: z.string().url().optional(),
+    version: z.string().optional(),
+    timeout: z.number().positive().optional(),
+    website: z.string().optional(),
+    email: z.string().email().optional(),
+    apiKey: z.string().optional(),
+  })
+  .optional();
 
 const RespectifyConfigSchema = z.object({
   enabled: z.boolean(),
+  /** @deprecated Prefer `client.baseUrl` — still accepted and mapped to the client base URL */
   apiEndpoint: z.string().url().optional(),
   requiresAuth: z.boolean().optional(),
   autoPublish: z
@@ -17,6 +43,10 @@ const RespectifyConfigSchema = z.object({
     blockDisrespectful: z.boolean(),
     showFeedbackToUser: z.boolean().optional(),
     allowOverride: z.boolean(),
+    /** Reject comments that fail relevance / banned-topic checks (default: true when relevance is enabled) */
+    blockOffTopic: z.boolean().optional(),
+    /** Reject comments when dogwhistles are detected (default: true when dogwhistle is enabled) */
+    blockDogwhistles: z.boolean().optional(),
   }),
   thresholds: z.object({
     autoApprove: z.number().min(0).max(1),
@@ -27,7 +57,13 @@ const RespectifyConfigSchema = z.object({
     approved: z.string(),
     warning: z.string(),
     blocked: z.string(),
+    offTopic: z.string().optional(),
+    dogwhistle: z.string().optional(),
   }),
+  /** Options forwarded to RespectifyClient (merged with integration `client` options) */
+  client: ClientConfigSchema,
+  /** Options forwarded to megacall (merged with integration `megacall` options) */
+  megacall: MegacallConfigSchema,
 });
 
 export type RespectifyConfig = z.infer<typeof RespectifyConfigSchema>;
@@ -52,6 +88,26 @@ export function loadRespectifyConfig(): RespectifyConfig {
   } catch (error) {
     throw new Error(`Failed to load Respectify config from ${resolvedPath}: ${error}`);
   }
+}
+
+/** Merge JSON + integration client options. Integration options win. */
+export function resolveClientConfig(config: RespectifyConfig): RespectifyClientConfig {
+  const { client: integrationClient } = getIntegrationOptions();
+  const fromJson: RespectifyClientConfig = {
+    ...(config.apiEndpoint ? { baseUrl: config.apiEndpoint } : {}),
+    ...config.client,
+  };
+  return { ...fromJson, ...integrationClient };
+}
+
+/** Merge JSON + integration megacall options. Integration options win. */
+export function resolveMegacallConfig(config: RespectifyConfig): RespectifyMegacallConfig {
+  const { megacall: integrationMegacall } = getIntegrationOptions();
+  return {
+    includeSpam: true,
+    ...config.megacall,
+    ...integrationMegacall,
+  };
 }
 
 export function getDefaultConfig(): RespectifyConfig {
