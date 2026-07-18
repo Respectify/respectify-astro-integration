@@ -19,6 +19,14 @@ export interface RespectifyIntegrationOptions {
   /** Build the canonical URL for a post — used to initialize Respectify topics */
   getPostUrl?: (slug: string, site: string) => string;
 
+  /**
+   * Provide a post's raw text content directly instead of having Respectify fetch
+   * `getPostUrl`. Useful when the URL isn't publicly fetchable (staged/preview content,
+   * auth-gated pages, or timing issues right after deploy). Takes priority over
+   * `getPostUrl` for topic initialization when provided.
+   */
+  getPostContent?: (slug: string) => string | Promise<string>;
+
   /** API route path for fetching comments (default: /api/respectify/comments) */
   commentsApiPath?: string;
 
