@@ -1,6 +1,6 @@
 {
   "name": "@respectify/astro",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Respectify-powered commenting for Astro — AI moderation, spam filtering, and beautiful UX out of the box.",
   "type": "module",
   "license": "MIT",
@@ -30,6 +30,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./actions": "./src/actions.ts",
+    "./credentials": "./src/credentials.ts",
     "./schema": "./src/schema.ts",
     "./routes/comments": "./src/routes/comments.ts",
     "./components/CommentSection.astro": "./components/CommentSection.astro",

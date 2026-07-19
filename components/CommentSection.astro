@@ -3,13 +3,14 @@ import '@respectify/astro/styles.css';
 import PoweredByRespectify from './PoweredByRespectify.astro';
 import CommentList from './CommentList.astro';
 import CommentForm from './CommentForm.astro';
+import { getIntegrationOptions } from '../src/runtime-config';
 
 interface Props {
   /** Unique identifier for the page/post (e.g. blog slug) */
   postSlug: string;
-  /** API path injected by the integration (default: /api/respectify/comments) */
+  /** API path (default: the integration's `commentsApiPath` option) */
   apiPath?: string;
-  /** Show Powered by Respectify branding (default: true) */
+  /** Show Powered by Respectify branding (default: the integration's `showBranding` option) */
   showBranding?: boolean;
   /** Enable admin delete controls when authenticated (default: false) */
   enableDelete?: boolean;
@@ -19,10 +20,12 @@ interface Props {
   style?: string;
 }
 
+const integrationOptions = getIntegrationOptions();
+
 const {
   postSlug,
-  apiPath = '/api/respectify/comments',
-  showBranding = true,
+  apiPath = integrationOptions.commentsApiPath,
+  showBranding = integrationOptions.showBranding,
   enableDelete = false,
   class: className,
   style,

@@ -2,6 +2,8 @@ import { defineAction, ActionError } from 'astro:actions';
 import { z } from 'astro/zod';
 import { db, Comment, eq } from 'astro:db';
 import { analyzeComment } from './lib/service';
+import { checkRateLimit } from './lib/rate-limit';
+import { getIntegrationOptions } from './runtime-config';
 
 /**
  * Merge into your src/actions/index.ts:
@@ -25,7 +27,23 @@ export const respectifyCommentActions = {
       content: z.string().min(1).max(5000),
       parentId: z.number().optional(),
     }),
-    handler: async ({ postSlug, author, email, content, parentId }) => {
+    handler: async ({ postSlug, author, email, content, parentId }, context) => {
+      const { rateLimit } = getIntegrationOptions();
+      if (rateLimit) {
+        let key = 'unknown';
+        try {
+          key = context.clientAddress;
+        } catch {
+          // Some adapters/rendering modes don't expose a client address; fall back to a shared bucket.
+        }
+        if (!checkRateLimit(key, rateLimit.windowMs, rateLimit.maxRequests)) {
+          throw new ActionError({
+            code: 'TOO_MANY_REQUESTS',
+            message: 'Too many comments submitted. Please wait a bit before trying again.',
+          });
+        }
+      }
+
       let replyToComment: string | undefined;
       if (parentId !== undefined) {
         const [parent] = await db.select().from(Comment).where(eq(Comment.id, parentId)).limit(1);

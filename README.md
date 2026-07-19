@@ -180,6 +180,14 @@ respectify({
   commentsApiPath: '/api/respectify/comments',
   showBranding: true,
   getPostUrl: (slug, site) => `${site}/posts/${slug}/`,
+
+  // Alternative to getPostUrl: hand Respectify the post body directly instead of
+  // having it fetch getPostUrl. Useful for staged/preview/auth-gated content, or
+  // when the URL isn't live yet right after deploy. Takes priority over getPostUrl.
+  // getPostContent: async (slug) => loadPostBody(slug),
+
+  // Per-IP submission limit, enforced in the `comments.submit` action.
+  // In-memory per server process — not shared across multiple instances/regions.
   rateLimit: { windowMs: 300_000, maxRequests: 10 },
 
   // Forwarded to RespectifyClient (email/apiKey still default from env)
@@ -202,6 +210,18 @@ respectify({
   },
 });
 ```
+
+`showBranding` and `commentsApiPath` set here become the defaults for `<CommentSection>` — you can still override either per-instance via props.
+
+### Checking Respectify credentials
+
+```ts
+import { verifyRespectifyCredentials } from '@respectify/astro/credentials';
+
+const isConnected = await verifyRespectifyCredentials();
+```
+
+Useful for an admin health-check page — returns `true` when `RESPECTIFY_EMAIL`/`RESPECTIFY_API_KEY` (or `client.email`/`client.apiKey`) are valid and the subscription is active.
 
 ### `respectify.config.json`
 

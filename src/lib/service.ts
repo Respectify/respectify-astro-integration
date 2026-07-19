@@ -54,18 +54,22 @@ async function getOrInitializeArticleId(postSlug: string, config: RespectifyConf
   const cached = articleIdCache.get(postSlug);
   if (cached) return cached;
 
-  const { getPostUrl } = getIntegrationOptions();
-  const site = import.meta.env.SITE;
-  if (!site) {
-    throw new Error('import.meta.env.SITE must be set in astro.config.ts for Respectify topic initialization.');
-  }
-
-  const postUrl = getPostUrl!(postSlug, site);
+  const { getPostUrl, getPostContent } = getIntegrationOptions();
   const respectifyClient = getRespectifyClient(config);
+  const topicDescription = `Post: ${postSlug}`;
 
-  const result = await respectifyClient.initTopicFromUrl(postUrl, `Post: ${postSlug}`);
+  const result = await (getPostContent
+    ? respectifyClient.initTopicFromText(await getPostContent(postSlug), topicDescription)
+    : (() => {
+        const site = import.meta.env.SITE;
+        if (!site) {
+          throw new Error('import.meta.env.SITE must be set in astro.config.ts for Respectify topic initialization.');
+        }
+        return respectifyClient.initTopicFromUrl(getPostUrl!(postSlug, site), topicDescription);
+      })());
+
   articleIdCache.set(postSlug, result.article_id);
-  logger.info('Initialized Respectify topic', { postSlug });
+  logger.info('Initialized Respectify topic', { postSlug, source: getPostContent ? 'text' : 'url' });
 
   return result.article_id;
 }
