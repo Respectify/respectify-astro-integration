@@ -1,5 +1,5 @@
 import type { RespectifyConfig } from './config';
-import { loadRespectifyConfig, resolveClientConfig, resolveMegacallConfig } from './config';
+import { loadRespectifyConfig, resolveClientConfig, resolveMegacallConfig, resolveTolerances } from './config';
 import { RESPECTIFY_API_KEY, RESPECTIFY_EMAIL } from 'astro:env/server';
 import {
   RespectifyClient,
@@ -116,6 +116,37 @@ function buildSuggestion(result: MegaCallResult, showFeedback: boolean): string 
   return suggestions.length > 0 ? suggestions.join(' ') : undefined;
 }
 
+/**
+ * Approve, warn or block on the comment's content.
+ *
+ * With a comment score, `exceeds_tolerance` decides whether there is a problem at all:
+ * - false: approved, whatever the toxicity (toxicity_score is not adjusted for the site's
+ *   tolerances, so a comment the site accepts is not held back by it)
+ * - true: blocked when respectfulness < thresholds.block and blockDisrespectful is on;
+ *   otherwise a warning, approved only when allowOverride is on
+ *
+ * Without exceeds_tolerance the respectfulness bands decide as before: >= autoApprove
+ * approves, < block blocks, anything between warns. With no comment score at all the score
+ * is autoApprove, so the comment is approved; a comment score lacking exceeds_tolerance
+ * (an API older than moderation tolerances) falls back to the bands on 1 - toxicity_score.
+ */
+function decideOnContent(
+  config: RespectifyConfig,
+  respectfulnessScore: number,
+  exceedsTolerance: boolean | undefined,
+): Pick<RespectifyAnalysisResult, 'approved' | 'feedback'> {
+  const isWithinTolerance =
+    exceedsTolerance === undefined ? respectfulnessScore >= config.thresholds.autoApprove : !exceedsTolerance;
+
+  if (isWithinTolerance) {
+    return { approved: true, feedback: config.feedback.approved };
+  }
+  if (respectfulnessScore < config.thresholds.block && config.moderation.blockDisrespectful) {
+    return { approved: false, feedback: config.feedback.blocked };
+  }
+  return { approved: config.moderation.allowOverride, feedback: config.feedback.warning };
+}
+
 export async function analyzeComment(
   text: string,
   postSlug?: string,
@@ -169,6 +200,12 @@ export async function analyzeComment(
       megacallOptions.replyToComment = options.replyToComment;
     }
 
+    // Tolerances only shape the comment score, which needs topic context
+    const tolerances = resolveTolerances(config);
+    if (tolerances && megacallOptions.includeCommentScore) {
+      megacallOptions.tolerances = tolerances;
+    }
+
     const result = await respectifyClient.megacall(megacallOptions);
     const showFeedback = config.moderation.showFeedbackToUser !== false;
 
@@ -206,32 +243,21 @@ export async function analyzeComment(
       };
     }
 
-    let respectfulnessScore = config.thresholds.autoApprove;
+    // Respectfulness is 1 - toxicity_score. Without a comment score there is nothing to
+    // judge content by, so the comment is treated as at the auto-approve threshold.
+    const respectfulnessScore = result.comment_score
+      ? 1 - (result.comment_score.toxicity_score ?? 0)
+      : config.thresholds.autoApprove;
+    const exceedsTolerance = result.comment_score?.exceeds_tolerance;
 
-    if (result.comment_score) {
-      const toxicityScore = result.comment_score.toxicity_score ?? 0;
-      respectfulnessScore = 1 - toxicityScore;
-    }
-
-    let approved = false;
-    let feedback = '';
-
-    if (respectfulnessScore >= config.thresholds.autoApprove) {
-      approved = true;
-      feedback = config.feedback.approved;
-    } else if (respectfulnessScore < config.thresholds.block && config.moderation.blockDisrespectful) {
-      approved = false;
-      feedback = config.feedback.blocked;
-    } else {
-      approved = config.moderation.allowOverride;
-      feedback = config.feedback.warning;
-    }
+    const { approved, feedback } = decideOnContent(config, respectfulnessScore, exceedsTolerance);
 
     const analysisResult: RespectifyAnalysisResult = {
       score: respectfulnessScore,
       approved,
       feedback,
     };
+    if (exceedsTolerance !== undefined) analysisResult.exceedsTolerance = exceedsTolerance;
 
     const suggestion = buildSuggestion(result, showFeedback);
     if (suggestion) analysisResult.suggestion = suggestion;

@@ -25,6 +25,7 @@
 //     rateLimit: { windowMs: 300_000, maxRequests: 10 },
 //     client: { /* same shape as "client" below */ },
 //     megacall: { /* same shape as "megacall" below */ },
+//     tolerances: { /* same shape as "tolerances" below; wins per category */ },
 //   })
 //
 // =============================================================================
@@ -90,14 +91,41 @@
   },
 
   // ---------------------------------------------------------------------------
+  // tolerances — how much of each kind of problem this site accepts
+  // Overrides the API key's saved tolerances (Respectify dashboard) for the
+  // categories named; the rest keep their saved level. Sent only when a
+  // comment score runs. Empty (or omitted) uses the saved tolerances as-is;
+  // naming a category here, even as "standard", overrides the dashboard.
+  //
+  // Levels: "relaxed" | "standard" (default) | "strict" | "zero_tolerance"
+  // threat, identity_attack, sexual_content and harassment are floored: they
+  // can be made stricter but never "relaxed" (the config fails to load).
+  // ---------------------------------------------------------------------------
+  "tolerances": {
+    // Floored categories: "standard" | "strict" | "zero_tolerance"
+    // "threat": "zero_tolerance",
+    // "identity_attack": "strict",
+    // "sexual_content": "strict",
+    // "harassment": "strict",
+
+    // Tunable categories: any level, including "relaxed"
+    // "insult": "relaxed",
+    // "profanity": "relaxed",
+    // "dismissive_tone": "standard",
+    // "logical_fallacy": "relaxed",
+    // "low_effort": "strict"
+  },
+
+  // ---------------------------------------------------------------------------
   // moderation — how megacall results become approve / reject decisions
   // ---------------------------------------------------------------------------
   "moderation": {
-    // Block comments whose respectfulness score is below `thresholds.block`
+    // When the comment score says exceeds_tolerance, block it if its
+    // respectfulness score is below `thresholds.block`
     "blockDisrespectful": true,
 
-    // Mid-band scores (between block and autoApprove): allow through with
-    // `feedback.warning` when true; otherwise treat like a soft reject path
+    // A comment that exceeds tolerance but is not blocked gets
+    // `feedback.warning`; allow it through when true, reject when false
     "allowOverride": false,
 
     // Include revision suggestions (toxicity explanation, fallacies, etc.)
@@ -116,15 +144,19 @@
   // ---------------------------------------------------------------------------
   // thresholds — respectfulness score bands (0.0–1.0)
   // Score is derived as `1 - toxicity_score` from comment_score when available.
+  // comment_score.exceeds_tolerance decides whether a comment has a problem:
+  // false → approve, whatever the score. true → the score picks warn or block.
   // ---------------------------------------------------------------------------
   "thresholds": {
-    // Score >= this → approve with `feedback.approved`
+    // Only used when the API returns no exceeds_tolerance (older API):
+    // score >= this → approve with `feedback.approved`
     "autoApprove": 0.7,
 
     // Reserved mid band (kept for compatibility; decisions use autoApprove/block)
     "warn": 0.5,
 
-    // Score < this + blockDisrespectful → reject with `feedback.blocked`
+    // exceeds_tolerance + score < this + blockDisrespectful → reject with
+    // `feedback.blocked`; exceeds_tolerance at or above this → `feedback.warning`
     "block": 0.3
   },
 

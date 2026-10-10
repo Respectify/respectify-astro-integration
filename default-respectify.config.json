@@ -1,6 +1,7 @@
 {
   "$schema": "./respectify.schema.json",
   "enabled": true,
+  "tolerances": {},
   "moderation": {
     "blockDisrespectful": true,
     "showFeedbackToUser": true,

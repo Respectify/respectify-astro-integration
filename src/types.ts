@@ -1,4 +1,4 @@
-import type { MegacallOptions, RespectifyClientOptions } from '@respectify/client';
+import type { MegacallOptions, ModerationTolerances, RespectifyClientOptions } from '@respectify/client';
 
 /**
  * Options forwarded to `RespectifyClient`.
@@ -8,9 +8,10 @@ export type RespectifyClientConfig = Partial<RespectifyClientOptions>;
 
 /**
  * Options forwarded to every `megacall`.
- * `comment` and `articleId` are set automatically by the integration.
+ * `comment` and `articleId` are set automatically by the integration, and
+ * `tolerances` comes from the top-level `tolerances` option.
  */
-export type RespectifyMegacallConfig = Omit<MegacallOptions, 'comment' | 'articleId'>;
+export type RespectifyMegacallConfig = Omit<MegacallOptions, 'comment' | 'articleId' | 'tolerances'>;
 
 export interface RespectifyIntegrationOptions {
   /** Path to respectify.config.json (default: ./respectify.config.json) */
@@ -51,6 +52,14 @@ export interface RespectifyIntegrationOptions {
    * `bannedTopics`, `sensitiveTopics`, `dogwhistleExamples`, `replyToComment`).
    */
   megacall?: RespectifyMegacallConfig;
+
+  /**
+   * Moderation tolerances sent with every megacall, merged per category over the
+   * `tolerances` in respectify.config.json (these win). The categories named override
+   * the API key's saved tolerances. Floored categories (threat, identity_attack,
+   * sexual_content, harassment) can never be "relaxed".
+   */
+  tolerances?: ModerationTolerances;
 }
 
 export interface AnalyzeCommentOptions {
@@ -65,4 +74,6 @@ export interface RespectifyAnalysisResult {
   suggestion?: string;
   isSpam?: boolean;
   spamConfidence?: number;
+  /** True when the comment score found a problem the site's tolerances do not accept */
+  exceedsTolerance?: boolean;
 }

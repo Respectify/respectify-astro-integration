@@ -1,8 +1,44 @@
 import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
+import { TOLERANCE_LEVELS } from '@respectify/client';
+import type { FlooredModerationCategory, FlooredToleranceLevel, ModerationTolerances } from '@respectify/client';
 import { getIntegrationOptions } from '../runtime-config';
 import type { RespectifyClientConfig, RespectifyMegacallConfig } from '../types';
+
+/** Levels a floored category accepts: standard or stricter, never relaxed. */
+const FLOORED_TOLERANCE_LEVELS = ['standard', 'strict', 'zero_tolerance'] as const satisfies readonly FlooredToleranceLevel[];
+
+const ToleranceLevelSchema = z.enum(TOLERANCE_LEVELS);
+
+/** A floored category's level, rejecting "relaxed" with the same wording the API uses. */
+function flooredToleranceLevelSchema(
+  category: FlooredModerationCategory,
+): z.ZodEnum<z.Writeable<typeof FLOORED_TOLERANCE_LEVELS>> {
+  return z.enum(FLOORED_TOLERANCE_LEVELS, {
+    errorMap: (_issue, ctx) => ({
+      message: ctx.data === 'relaxed' ? `${category} can be made stricter but not relaxed` : ctx.defaultError,
+    }),
+  });
+}
+
+/**
+ * Per-site moderation tolerances. The categories named override the API key's saved
+ * tolerances; the rest keep their saved level. Unknown categories are rejected.
+ */
+const ModerationTolerancesSchema = z
+  .object({
+    threat: flooredToleranceLevelSchema('threat').optional(),
+    identity_attack: flooredToleranceLevelSchema('identity_attack').optional(),
+    sexual_content: flooredToleranceLevelSchema('sexual_content').optional(),
+    harassment: flooredToleranceLevelSchema('harassment').optional(),
+    insult: ToleranceLevelSchema.optional(),
+    profanity: ToleranceLevelSchema.optional(),
+    dismissive_tone: ToleranceLevelSchema.optional(),
+    logical_fallacy: ToleranceLevelSchema.optional(),
+    low_effort: ToleranceLevelSchema.optional(),
+  })
+  .strict() satisfies z.ZodType<ModerationTolerances>;
 
 const MegacallConfigSchema = z
   .object({
@@ -64,6 +100,8 @@ const RespectifyConfigSchema = z.object({
   client: ClientConfigSchema,
   /** Options forwarded to megacall (merged with integration `megacall` options) */
   megacall: MegacallConfigSchema,
+  /** Moderation tolerances sent with every megacall (merged with integration `tolerances`) */
+  tolerances: ModerationTolerancesSchema.optional(),
 });
 
 export type RespectifyConfig = z.infer<typeof RespectifyConfigSchema>;
@@ -108,6 +146,16 @@ export function resolveMegacallConfig(config: RespectifyConfig): RespectifyMegac
     ...config.megacall,
     ...integrationMegacall,
   };
+}
+
+/**
+ * Merge JSON + integration tolerances per category. Integration options win.
+ * Undefined when neither names a category, so the API key's saved tolerances apply unchanged.
+ */
+export function resolveTolerances(config: RespectifyConfig): ModerationTolerances | undefined {
+  const { tolerances: integrationTolerances } = getIntegrationOptions();
+  const merged: ModerationTolerances = { ...config.tolerances, ...integrationTolerances };
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 export function getDefaultConfig(): RespectifyConfig {

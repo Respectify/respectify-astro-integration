@@ -208,6 +208,10 @@ respectify({
     sensitiveTopics: [],
     dogwhistleExamples: [],
   },
+
+  // Moderation tolerances sent with every megacall, merged per category over the
+  // JSON config's `tolerances` (these win). See "Moderation tolerances" below.
+  tolerances: { insult: 'relaxed', threat: 'zero_tolerance' },
 });
 ```
 
@@ -230,6 +234,35 @@ Moderation policy lives in the JSON file. You can also put `client` / `megacall`
 For a field-by-field walkthrough with comments, see [`respectify.config.sample.jsonc`](./respectify.config.sample.jsonc).
 
 Replies automatically pass the parent comment text as `replyToComment` to Respectify.
+
+### Moderation tolerances
+
+Each API key has saved tolerances, one per category, set in the Respectify dashboard. `tolerances` (in `respectify.config.json` or the integration options) overrides them for the categories it names; the rest keep their saved level.
+
+```json
+{
+  "tolerances": { "insult": "relaxed", "profanity": "strict", "threat": "zero_tolerance" }
+}
+```
+
+- Categories: `threat`, `identity_attack`, `sexual_content`, `harassment`, `insult`, `profanity`, `dismissive_tone`, `logical_fallacy`, `low_effort`
+- Levels: `relaxed`, `standard` (default), `strict`, `zero_tolerance`
+- `threat`, `identity_attack`, `sexual_content` and `harassment` are floored: they can be made stricter but never `relaxed`. The config fails to load if you try (and the integration throws at setup for the `tolerances` option).
+
+Tolerances shape the comment score, so they are only sent when a comment score runs (which needs topic context).
+
+### How comments are approved, warned or blocked
+
+Spam, off-topic (`blockOffTopic`) and dogwhistle (`blockDogwhistles`) rejections come first. Then, on content:
+
+| Comment score says | Respectfulness (`1 - toxicity_score`) | Result |
+| --- | --- | --- |
+| `exceeds_tolerance: false` | any | Approved (`feedback.approved`) |
+| `exceeds_tolerance: true` | `< thresholds.block` and `blockDisrespectful` | Blocked (`feedback.blocked`) |
+| `exceeds_tolerance: true` | otherwise | Warning (`feedback.warning`), approved only when `allowOverride` |
+| no comment score | — | Approved |
+
+`exceeds_tolerance` decides whether a comment has a problem at all, because it reflects your site's tolerances; `toxicity_score` does not, so it only chooses between warning and blocking. `thresholds.autoApprove` applies only when the API returns a comment score without `exceeds_tolerance` (an API older than tolerances), where the previous bands are used. The returned `exceedsTolerance` field carries the verdict.
 
 ### Admin delete (optional)
 
