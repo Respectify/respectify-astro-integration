@@ -61,12 +61,14 @@
     "zod": "^3.24.0"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@astrojs/db": "^0.20.0",
     "@respectify/client": "^0.6.0",
     "astro": "^6.0.4",
-    "typescript": "^5.4.3"
+    "typescript": "^5.4.3",
+    "vitest": "^3.2.4"
   }
 }
