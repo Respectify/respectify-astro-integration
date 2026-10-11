@@ -141,6 +141,36 @@ describe('analyzeComment with exceeds_tolerance', () => {
   });
 });
 
+describe('analyzeComment comment-health results', () => {
+  it('returns the per-item health results and health score from the comment score', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    const healthItems = {
+      insult: { score: 2, minimum: 4, is_acceptable: false },
+      quality: { score: 3, minimum: 3, is_acceptable: true },
+    } as const;
+    api.respondToMegacallWith(
+      megacallResult({
+        comment_score: commentScore({ exceeds_tolerance: true, health_score: 2.449, health_items: healthItems }),
+      }),
+    );
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.healthItems).toEqual(healthItems);
+    expect(result.healthScore).toBeCloseTo(2.449);
+  });
+
+  it('leaves the health results out when an older API omits them', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(megacallResult({ comment_score: commentScore({ exceeds_tolerance: false }) }));
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result).not.toHaveProperty('healthItems');
+    expect(result).not.toHaveProperty('healthScore');
+  });
+});
+
 describe('analyzeComment without exceeds_tolerance', () => {
   it('approves at the auto-approve score when there is no comment score', async () => {
     const analyzeComment = await loadAnalyzeComment(baseConfig());
@@ -200,6 +230,17 @@ describe('tolerances sent with megacall', () => {
     expect(request?.run_comment_score).toBe(true);
     expect(request?.article_context_id).toBe(FAKE_ARTICLE_ID);
     expect(request?.tolerances).toEqual({ insult: 'relaxed', threat: 'zero_tolerance' });
+  });
+
+  it('sends quality and off levels', async () => {
+    const config: RespectifyConfig = { ...baseConfig(), tolerances: { quality: 'strict', profanity: 'off' } };
+    const analyzeComment = await loadAnalyzeComment(config);
+    api.respondToMegacallWith(megacallResult({ comment_score: commentScore({ exceeds_tolerance: false }) }));
+
+    await analyzeComment(COMMENT, POST_SLUG);
+
+    const [request] = api.megacallRequests();
+    expect(request?.tolerances).toEqual({ quality: 'strict', profanity: 'off' });
   });
 
   it('does not send tolerances without topic context, since the comment score cannot run', async () => {

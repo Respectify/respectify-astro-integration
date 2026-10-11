@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { FLOORED_MODERATION_CATEGORIES } from '@respectify/client';
+import { FLOORED_MODERATION_CATEGORIES, TOLERANCE_LEVELS } from '@respectify/client';
 import { loadRespectifyConfig, resolveTolerances } from '../src/lib/config';
 import { setIntegrationOptions } from '../src/runtime-config';
 import { baseConfig, createConfigFileDirectory } from './helpers/config-file';
@@ -26,7 +26,13 @@ describe('tolerances schema', () => {
 
   it.each(FLOORED_MODERATION_CATEGORIES)('rejects relaxed for the floored category %s', (category) => {
     expect(() => loadWithTolerances({ [category]: 'relaxed' })).toThrow(
-      `${category} can be made stricter but not relaxed`,
+      `${category} can be made stricter but not relaxed or turned off`,
+    );
+  });
+
+  it.each(FLOORED_MODERATION_CATEGORIES)('rejects off for the floored category %s', (category) => {
+    expect(() => loadWithTolerances({ [category]: 'off' })).toThrow(
+      `${category} can be made stricter but not relaxed or turned off`,
     );
   });
 
@@ -40,8 +46,23 @@ describe('tolerances schema', () => {
     expect(loadWithTolerances({ [category]: 'relaxed' }).tolerances).toEqual({ [category]: 'relaxed' });
   });
 
+  it.each(TUNABLE_CATEGORIES)('accepts off for the tunable category %s', (category) => {
+    expect(loadWithTolerances({ [category]: 'off' }).tolerances).toEqual({ [category]: 'off' });
+  });
+
+  it.each(TOLERANCE_LEVELS)('accepts %s for quality', (level) => {
+    expect(loadWithTolerances({ quality: level }).tolerances).toEqual({ quality: level });
+  });
+
   it('accepts a mix of floored and tunable categories in one config', () => {
-    const tolerances = { threat: 'zero_tolerance', harassment: 'strict', insult: 'relaxed', low_effort: 'strict' };
+    const tolerances = {
+      threat: 'zero_tolerance',
+      harassment: 'strict',
+      insult: 'relaxed',
+      profanity: 'off',
+      low_effort: 'strict',
+      quality: 'strict',
+    };
     expect(loadWithTolerances(tolerances).tolerances).toEqual(tolerances);
   });
 

@@ -209,9 +209,9 @@ respectify({
     dogwhistleExamples: [],
   },
 
-  // Moderation tolerances sent with every megacall, merged per category over the
-  // JSON config's `tolerances` (these win). See "Moderation tolerances" below.
-  tolerances: { insult: 'relaxed', threat: 'zero_tolerance' },
+  // Comment-health tolerances sent with every megacall, merged per item over the
+  // JSON config's `tolerances` (these win). See "Comment health and tolerances" below.
+  tolerances: { insult: 'relaxed', threat: 'zero_tolerance', quality: 'strict' },
 });
 ```
 
@@ -235,21 +235,22 @@ For a field-by-field walkthrough with comments, see [`respectify.config.sample.j
 
 Replies automatically pass the parent comment text as `replyToComment` to Respectify.
 
-### Moderation tolerances
+### Comment health and tolerances
 
-Each API key has saved tolerances, one per category, set in the Respectify dashboard. `tolerances` (in `respectify.config.json` or the integration options) overrides them for the categories it names; the rest keep their saved level.
+Comment health has ten items: the nine problem categories and `quality`. `tolerances` (in `respectify.config.json` or the integration options) sets a level per item; items not named are `standard`. Nothing is stored on the API key.
 
 ```json
 {
-  "tolerances": { "insult": "relaxed", "profanity": "strict", "threat": "zero_tolerance" }
+  "tolerances": { "insult": "relaxed", "profanity": "off", "threat": "zero_tolerance", "quality": "strict" }
 }
 ```
 
-- Categories: `threat`, `identity_attack`, `sexual_content`, `harassment`, `insult`, `profanity`, `dismissive_tone`, `logical_fallacy`, `low_effort`
-- Levels: `relaxed`, `standard` (default), `strict`, `zero_tolerance`
-- `threat`, `identity_attack`, `sexual_content` and `harassment` are floored: they can be made stricter but never `relaxed`. The config fails to load if you try (and the integration throws at setup for the `tolerances` option).
+- Items: `threat`, `identity_attack`, `sexual_content`, `harassment`, `insult`, `profanity`, `dismissive_tone`, `logical_fallacy`, `low_effort`, `quality`
+- Levels: `off`, `relaxed`, `standard` (default), `strict`, `zero_tolerance`
+- A problem category fails on its worst finding: `relaxed` fails only severe findings, `standard` fails clear and severe ones, `strict` and `zero_tolerance` fail any. `quality` sets the lowest 1-5 quality score accepted: `relaxed` 2, `standard` 3, `strict` 4, `zero_tolerance` 5. `off` leaves the item out of comment health.
+- `threat`, `identity_attack`, `sexual_content` and `harassment` are floored: they can be made stricter but never `relaxed` or `off`. The config fails to load if you try (and the integration throws at setup for the `tolerances` option).
 
-Tolerances shape the comment score, so they are only sent when a comment score runs (which needs topic context).
+Tolerances shape the comment score, so they are only sent when a comment score runs (which needs topic context). When the API returns them, the analysis result carries `healthScore` (1.0-5.0) and `healthItems` (per item: `score`, `minimum`, `is_acceptable`).
 
 ### How comments are approved, warned or blocked
 
@@ -262,7 +263,7 @@ Spam, off-topic (`blockOffTopic`) and dogwhistle (`blockDogwhistles`) rejections
 | `exceeds_tolerance: true` | otherwise | Warning (`feedback.warning`), approved only when `allowOverride` |
 | no comment score | — | Approved |
 
-`exceeds_tolerance` decides whether a comment has a problem at all, because it reflects your site's tolerances; `toxicity_score` does not, so it only chooses between warning and blocking. `thresholds.autoApprove` applies only when the API returns a comment score without `exceeds_tolerance` (an API older than tolerances), where the previous bands are used. The returned `exceedsTolerance` field carries the verdict.
+`exceeds_tolerance` decides whether a comment has a problem at all, because it reflects your site's comment-health tolerances (any item below its minimum, or severe toxicity); `toxicity_score` does not, so it only chooses between warning and blocking. `thresholds.autoApprove` applies only when the API returns a comment score without `exceeds_tolerance` (an API older than tolerances), where the previous bands are used. The returned `exceedsTolerance` field carries the verdict.
 
 ### Admin delete (optional)
 

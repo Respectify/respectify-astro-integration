@@ -258,6 +258,8 @@ export async function analyzeComment(
       feedback,
     };
     if (exceedsTolerance !== undefined) analysisResult.exceedsTolerance = exceedsTolerance;
+    if (result.comment_score?.health_score !== undefined) analysisResult.healthScore = result.comment_score.health_score;
+    if (result.comment_score?.health_items !== undefined) analysisResult.healthItems = result.comment_score.health_items;
 
     const suggestion = buildSuggestion(result, showFeedback);
     if (suggestion) analysisResult.suggestion = suggestion;

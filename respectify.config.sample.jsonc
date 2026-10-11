@@ -25,7 +25,7 @@
 //     rateLimit: { windowMs: 300_000, maxRequests: 10 },
 //     client: { /* same shape as "client" below */ },
 //     megacall: { /* same shape as "megacall" below */ },
-//     tolerances: { /* same shape as "tolerances" below; wins per category */ },
+//     tolerances: { /* same shape as "tolerances" below; wins per item */ },
 //   })
 //
 // =============================================================================
@@ -91,15 +91,17 @@
   },
 
   // ---------------------------------------------------------------------------
-  // tolerances — how much of each kind of problem this site accepts
-  // Overrides the API key's saved tolerances (Respectify dashboard) for the
-  // categories named; the rest keep their saved level. Sent only when a
-  // comment score runs. Empty (or omitted) uses the saved tolerances as-is;
-  // naming a category here, even as "standard", overrides the dashboard.
+  // tolerances — comment health: how much of each item this site accepts
+  // Ten items: the nine problem categories below, plus "quality". Items not
+  // named are "standard". Sent only when a comment score runs.
   //
-  // Levels: "relaxed" | "standard" (default) | "strict" | "zero_tolerance"
+  // Levels: "off" | "relaxed" | "standard" (default) | "strict" | "zero_tolerance"
+  // Problem categories, by their worst finding: relaxed fails only severe,
+  // standard fails clear and severe, strict and zero_tolerance fail any.
+  // Quality, the lowest 1-5 score accepted: relaxed 2, standard 3, strict 4,
+  // zero_tolerance 5. "off" leaves the item out of comment health entirely.
   // threat, identity_attack, sexual_content and harassment are floored: they
-  // can be made stricter but never "relaxed" (the config fails to load).
+  // can be made stricter but never "relaxed" or "off" (the config fails to load).
   // ---------------------------------------------------------------------------
   "tolerances": {
     // Floored categories: "standard" | "strict" | "zero_tolerance"
@@ -108,12 +110,15 @@
     // "sexual_content": "strict",
     // "harassment": "strict",
 
-    // Tunable categories: any level, including "relaxed"
+    // Tunable categories: any level, including "relaxed" and "off"
     // "insult": "relaxed",
-    // "profanity": "relaxed",
+    // "profanity": "off",
     // "dismissive_tone": "standard",
     // "logical_fallacy": "relaxed",
-    // "low_effort": "strict"
+    // "low_effort": "strict",
+
+    // Quality: any level
+    // "quality": "strict"
   },
 
   // ---------------------------------------------------------------------------

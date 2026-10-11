@@ -1,4 +1,9 @@
-import type { MegacallOptions, ModerationTolerances, RespectifyClientOptions } from '@respectify/client';
+import type {
+  HealthItemScores,
+  MegacallOptions,
+  ModerationTolerances,
+  RespectifyClientOptions,
+} from '@respectify/client';
 
 /**
  * Options forwarded to `RespectifyClient`.
@@ -54,10 +59,10 @@ export interface RespectifyIntegrationOptions {
   megacall?: RespectifyMegacallConfig;
 
   /**
-   * Moderation tolerances sent with every megacall, merged per category over the
-   * `tolerances` in respectify.config.json (these win). The categories named override
-   * the API key's saved tolerances. Floored categories (threat, identity_attack,
-   * sexual_content, harassment) can never be "relaxed".
+   * Comment-health tolerances sent with every megacall, merged per item over the
+   * `tolerances` in respectify.config.json (these win). Items not named are "standard".
+   * Floored categories (threat, identity_attack, sexual_content, harassment) can never
+   * be "relaxed" or "off".
    */
   tolerances?: ModerationTolerances;
 }
@@ -76,4 +81,8 @@ export interface RespectifyAnalysisResult {
   spamConfidence?: number;
   /** True when the comment score found a problem the site's tolerances do not accept */
   exceedsTolerance?: boolean;
+  /** Comment health, 1.0-5.0, when the API returned it */
+  healthScore?: number;
+  /** Per-item comment-health results (score, minimum, is_acceptable), when the API returned them */
+  healthItems?: HealthItemScores;
 }

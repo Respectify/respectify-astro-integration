@@ -6,25 +6,28 @@ import type { FlooredModerationCategory, FlooredToleranceLevel, ModerationTolera
 import { getIntegrationOptions } from '../runtime-config';
 import type { RespectifyClientConfig, RespectifyMegacallConfig } from '../types';
 
-/** Levels a floored category accepts: standard or stricter, never relaxed. */
+/** Levels a floored category accepts: standard or stricter, never relaxed or off. */
 const FLOORED_TOLERANCE_LEVELS = ['standard', 'strict', 'zero_tolerance'] as const satisfies readonly FlooredToleranceLevel[];
 
 const ToleranceLevelSchema = z.enum(TOLERANCE_LEVELS);
 
-/** A floored category's level, rejecting "relaxed" with the same wording the API uses. */
+/** A floored category's level, rejecting "relaxed" and "off" with the same wording the API uses. */
 function flooredToleranceLevelSchema(
   category: FlooredModerationCategory,
 ): z.ZodEnum<z.Writeable<typeof FLOORED_TOLERANCE_LEVELS>> {
   return z.enum(FLOORED_TOLERANCE_LEVELS, {
     errorMap: (_issue, ctx) => ({
-      message: ctx.data === 'relaxed' ? `${category} can be made stricter but not relaxed` : ctx.defaultError,
+      message:
+        ctx.data === 'relaxed' || ctx.data === 'off'
+          ? `${category} can be made stricter but not relaxed or turned off`
+          : ctx.defaultError,
     }),
   });
 }
 
 /**
- * Per-site moderation tolerances. The categories named override the API key's saved
- * tolerances; the rest keep their saved level. Unknown categories are rejected.
+ * Per-site tolerances: a level per comment-health item (the nine problem categories and
+ * quality). Items not named are "standard". Unknown items are rejected.
  */
 const ModerationTolerancesSchema = z
   .object({
@@ -37,6 +40,7 @@ const ModerationTolerancesSchema = z
     dismissive_tone: ToleranceLevelSchema.optional(),
     logical_fallacy: ToleranceLevelSchema.optional(),
     low_effort: ToleranceLevelSchema.optional(),
+    quality: ToleranceLevelSchema.optional(),
   })
   .strict() satisfies z.ZodType<ModerationTolerances>;
 
@@ -149,8 +153,8 @@ export function resolveMegacallConfig(config: RespectifyConfig): RespectifyMegac
 }
 
 /**
- * Merge JSON + integration tolerances per category. Integration options win.
- * Undefined when neither names a category, so the API key's saved tolerances apply unchanged.
+ * Merge JSON + integration tolerances per item. Integration options win.
+ * Undefined when neither names an item, so every item is judged at "standard".
  */
 export function resolveTolerances(config: RespectifyConfig): ModerationTolerances | undefined {
   const { tolerances: integrationTolerances } = getIntegrationOptions();
