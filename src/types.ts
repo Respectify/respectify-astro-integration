@@ -62,7 +62,7 @@ export interface RespectifyIntegrationOptions {
    * Comment-health tolerances sent with every megacall, merged per item over the
    * `tolerances` in respectify.config.json (these win). Items not named are "standard".
    * Floored categories (threat, identity_attack, sexual_content, harassment) can never
-   * be "relaxed" or "off".
+   * be "permissive", "relaxed" or "off".
    */
   tolerances?: ModerationTolerances;
 }

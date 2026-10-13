@@ -95,13 +95,18 @@
   // Ten items: the nine problem categories below, plus "quality". Items not
   // named are "standard". Sent only when a comment score runs.
   //
-  // Levels: "off" | "relaxed" | "standard" (default) | "strict" | "zero_tolerance"
-  // Problem categories, by their worst finding: relaxed fails only severe,
-  // standard fails clear and severe, strict and zero_tolerance fail any.
-  // Quality, the lowest 1-5 score accepted: relaxed 2, standard 3, strict 4,
-  // zero_tolerance 5. "off" leaves the item out of comment health entirely.
+  // Levels, loosest to strictest:
+  //   "off" | "permissive" | "relaxed" | "standard" (default) | "strict" | "zero_tolerance"
+  // Problem categories, by their worst finding (minor, clear, severe, extreme):
+  // permissive filters only the very worst (fails extreme only), relaxed fails
+  // severe and extreme, standard fails clear and worse, strict and
+  // zero_tolerance fail any.
+  // Quality, the lowest 1-5 score accepted: permissive and relaxed 2,
+  // standard 3, strict 4, zero_tolerance 5. "off" leaves the item out of
+  // comment health entirely.
   // threat, identity_attack, sexual_content and harassment are floored: they
-  // can be made stricter but never "relaxed" or "off" (the config fails to load).
+  // can be made stricter but never "permissive", "relaxed" or "off" (the config
+  // fails to load).
   // ---------------------------------------------------------------------------
   "tolerances": {
     // Floored categories: "standard" | "strict" | "zero_tolerance"
@@ -110,7 +115,7 @@
     // "sexual_content": "strict",
     // "harassment": "strict",
 
-    // Tunable categories: any level, including "relaxed" and "off"
+    // Tunable categories: any level, including "permissive", "relaxed" and "off"
     // "insult": "relaxed",
     // "profanity": "off",
     // "dismissive_tone": "standard",

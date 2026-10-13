@@ -243,6 +243,17 @@ describe('tolerances sent with megacall', () => {
     expect(request?.tolerances).toEqual({ quality: 'strict', profanity: 'off' });
   });
 
+  it('sends permissive levels', async () => {
+    const config: RespectifyConfig = { ...baseConfig(), tolerances: { insult: 'permissive', quality: 'permissive' } };
+    const analyzeComment = await loadAnalyzeComment(config);
+    api.respondToMegacallWith(megacallResult({ comment_score: commentScore({ exceeds_tolerance: false }) }));
+
+    await analyzeComment(COMMENT, POST_SLUG);
+
+    const [request] = api.megacallRequests();
+    expect(request?.tolerances).toEqual({ insult: 'permissive', quality: 'permissive' });
+  });
+
   it('does not send tolerances without topic context, since the comment score cannot run', async () => {
     const config: RespectifyConfig = { ...baseConfig(), tolerances: { insult: 'relaxed' } };
     const analyzeComment = await loadAnalyzeComment(config);

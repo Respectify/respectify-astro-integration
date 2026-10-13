@@ -2,23 +2,31 @@ import { z } from 'zod';
 import fs from 'node:fs';
 import path from 'node:path';
 import { TOLERANCE_LEVELS } from '@respectify/client';
-import type { FlooredModerationCategory, FlooredToleranceLevel, ModerationTolerances } from '@respectify/client';
+import type {
+  FlooredModerationCategory,
+  FlooredToleranceLevel,
+  ModerationTolerances,
+  ToleranceLevel,
+} from '@respectify/client';
 import { getIntegrationOptions } from '../runtime-config';
 import type { RespectifyClientConfig, RespectifyMegacallConfig } from '../types';
 
-/** Levels a floored category accepts: standard or stricter, never relaxed or off. */
+/** Levels a floored category accepts: standard or stricter, never permissive, relaxed or off. */
 const FLOORED_TOLERANCE_LEVELS = ['standard', 'strict', 'zero_tolerance'] as const satisfies readonly FlooredToleranceLevel[];
 
 const ToleranceLevelSchema = z.enum(TOLERANCE_LEVELS);
 
-/** A floored category's level, rejecting "relaxed" and "off" with the same wording the API uses. */
+/** Levels looser than a floored category allows, which get the API's floor wording rather than the default error. */
+const BELOW_FLOOR_TOLERANCE_LEVELS: readonly ToleranceLevel[] = ['off', 'permissive', 'relaxed'];
+
+/** A floored category's level, rejecting "permissive", "relaxed" and "off" with the same wording the API uses. */
 function flooredToleranceLevelSchema(
   category: FlooredModerationCategory,
 ): z.ZodEnum<z.Writeable<typeof FLOORED_TOLERANCE_LEVELS>> {
   return z.enum(FLOORED_TOLERANCE_LEVELS, {
     errorMap: (_issue, ctx) => ({
       message:
-        ctx.data === 'relaxed' || ctx.data === 'off'
+        BELOW_FLOOR_TOLERANCE_LEVELS.includes(ctx.data)
           ? `${category} can be made stricter but not relaxed or turned off`
           : ctx.defaultError,
     }),

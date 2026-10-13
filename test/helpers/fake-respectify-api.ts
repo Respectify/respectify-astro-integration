@@ -53,7 +53,6 @@ export function megacallResult(overrides: Partial<WireMegaCallResult> = {}): Wir
     relevance_check: null,
     dogwhistle_check: null,
     perspective: null,
-    llm_detection: null,
     ...overrides,
   };
 }

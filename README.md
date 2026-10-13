@@ -246,9 +246,9 @@ Comment health has ten items: the nine problem categories and `quality`. `tolera
 ```
 
 - Items: `threat`, `identity_attack`, `sexual_content`, `harassment`, `insult`, `profanity`, `dismissive_tone`, `logical_fallacy`, `low_effort`, `quality`
-- Levels: `off`, `relaxed`, `standard` (default), `strict`, `zero_tolerance`
-- A problem category fails on its worst finding: `relaxed` fails only severe findings, `standard` fails clear and severe ones, `strict` and `zero_tolerance` fail any. `quality` sets the lowest 1-5 quality score accepted: `relaxed` 2, `standard` 3, `strict` 4, `zero_tolerance` 5. `off` leaves the item out of comment health.
-- `threat`, `identity_attack`, `sexual_content` and `harassment` are floored: they can be made stricter but never `relaxed` or `off`. The config fails to load if you try (and the integration throws at setup for the `tolerances` option).
+- Levels, loosest to strictest: `off`, `permissive`, `relaxed`, `standard` (default), `strict`, `zero_tolerance`
+- A problem category fails on its worst finding (severity 1 minor, 2 clear, 3 severe, 4 extreme): `permissive` filters only the very worst, failing extreme findings alone; `relaxed` fails severe and extreme findings; `standard` fails clear, severe and extreme ones; `strict` and `zero_tolerance` fail any. `quality` sets the lowest 1-5 quality score accepted: `permissive` and `relaxed` 2, `standard` 3, `strict` 4, `zero_tolerance` 5. `off` leaves the item out of comment health.
+- `threat`, `identity_attack`, `sexual_content` and `harassment` are floored: they can be made stricter but never `permissive`, `relaxed` or `off`. The config fails to load if you try (and the integration throws at setup for the `tolerances` option).
 
 Tolerances shape the comment score, so they are only sent when a comment score runs (which needs topic context). When the API returns them, the analysis result carries `healthScore` (1.0-5.0) and `healthItems` (per item: `score`, `minimum`, `is_acceptable`).
 

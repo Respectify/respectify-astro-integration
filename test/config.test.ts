@@ -30,6 +30,12 @@ describe('tolerances schema', () => {
     );
   });
 
+  it.each(FLOORED_MODERATION_CATEGORIES)('rejects permissive for the floored category %s', (category) => {
+    expect(() => loadWithTolerances({ [category]: 'permissive' })).toThrow(
+      `${category} can be made stricter but not relaxed or turned off`,
+    );
+  });
+
   it.each(FLOORED_MODERATION_CATEGORIES)('rejects off for the floored category %s', (category) => {
     expect(() => loadWithTolerances({ [category]: 'off' })).toThrow(
       `${category} can be made stricter but not relaxed or turned off`,
@@ -44,6 +50,14 @@ describe('tolerances schema', () => {
 
   it.each(TUNABLE_CATEGORIES)('accepts relaxed for the tunable category %s', (category) => {
     expect(loadWithTolerances({ [category]: 'relaxed' }).tolerances).toEqual({ [category]: 'relaxed' });
+  });
+
+  it.each(TUNABLE_CATEGORIES)('accepts permissive for the tunable category %s', (category) => {
+    expect(loadWithTolerances({ [category]: 'permissive' }).tolerances).toEqual({ [category]: 'permissive' });
+  });
+
+  it('accepts permissive for quality', () => {
+    expect(loadWithTolerances({ quality: 'permissive' }).tolerances).toEqual({ quality: 'permissive' });
   });
 
   it.each(TUNABLE_CATEGORIES)('accepts off for the tunable category %s', (category) => {
