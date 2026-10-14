@@ -208,6 +208,10 @@ respectify({
     sensitiveTopics: [],
     dogwhistleExamples: [],
   },
+
+  // Comment-health tolerances sent with every megacall, merged per item over the
+  // JSON config's `tolerances` (these win). See "Comment health and tolerances" below.
+  tolerances: { insult: 'relaxed', threat: 'zero_tolerance', quality: 'strict' },
 });
 ```
 
@@ -230,6 +234,36 @@ Moderation policy lives in the JSON file. You can also put `client` / `megacall`
 For a field-by-field walkthrough with comments, see [`respectify.config.sample.jsonc`](./respectify.config.sample.jsonc).
 
 Replies automatically pass the parent comment text as `replyToComment` to Respectify.
+
+### Comment health and tolerances
+
+Comment health has ten items: the nine problem categories and `quality`. `tolerances` (in `respectify.config.json` or the integration options) sets a level per item; items not named are `standard`. Nothing is stored on the API key.
+
+```json
+{
+  "tolerances": { "insult": "relaxed", "profanity": "off", "threat": "zero_tolerance", "quality": "strict" }
+}
+```
+
+- Items: `threat`, `identity_attack`, `sexual_content`, `harassment`, `insult`, `profanity`, `dismissive_tone`, `logical_fallacy`, `low_effort`, `quality`
+- Levels, loosest to strictest: `off`, `permissive`, `relaxed`, `standard` (default), `strict`, `zero_tolerance`
+- A problem category fails on its worst finding (severity 1 minor, 2 clear, 3 severe, 4 extreme): `permissive` filters only the very worst, failing extreme findings alone; `relaxed` fails severe and extreme findings; `standard` fails clear, severe and extreme ones; `strict` and `zero_tolerance` fail any. `quality` sets the lowest 1-5 quality score accepted: `permissive` and `relaxed` 2, `standard` 3, `strict` 4, `zero_tolerance` 5. `off` leaves the item out of comment health.
+- `threat`, `identity_attack`, `sexual_content` and `harassment` are floored: they can be made stricter but never `permissive`, `relaxed` or `off`. The config fails to load if you try (and the integration throws at setup for the `tolerances` option).
+
+Tolerances shape the comment score, so they are only sent when a comment score runs (which needs topic context). When the API returns them, the analysis result carries `healthScore` (1.0-5.0) and `healthItems` (per item: `score`, `minimum`, `is_acceptable`).
+
+### How comments are approved, warned or blocked
+
+Spam, off-topic (`blockOffTopic`) and dogwhistle (`blockDogwhistles`) rejections come first. Suspected spam is not spam: the comment is sent back to the commenter (never approved, even with `allowOverride`) with the server's suggestion as `feedback`, such as "This looks like spam. How about removing the link?", while any comment-health coaching stays in `suggestion`. The analysis result carries `suspectedSpam` and `spamSuggestion` (and `isSpam: false`) whenever a spam check ran; `suspectedSpam` is `false` when an older API omits it, and the `comments.submit` action returns `suspectedSpam` for a comment it did not publish. Then, on content:
+
+| Comment score says | Respectfulness (`1 - toxicity_score`) | Result |
+| --- | --- | --- |
+| `exceeds_tolerance: false` | any | Approved (`feedback.approved`) |
+| `exceeds_tolerance: true` | `< thresholds.block` and `blockDisrespectful` | Blocked (`feedback.blocked`) |
+| `exceeds_tolerance: true` | otherwise | Warning (`feedback.warning`), approved only when `allowOverride` |
+| no comment score | — | Approved |
+
+`exceeds_tolerance` decides whether a comment has a problem at all, because it reflects your site's comment-health tolerances (any item below its minimum, or severe toxicity); `toxicity_score` does not, so it only chooses between warning and blocking. `thresholds.autoApprove` applies only when the API returns a comment score without `exceeds_tolerance` (an API older than tolerances), where the previous bands are used. The returned `exceedsTolerance` field carries the verdict.
 
 ### Admin delete (optional)
 

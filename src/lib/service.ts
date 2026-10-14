@@ -1,5 +1,5 @@
 import type { RespectifyConfig } from './config';
-import { loadRespectifyConfig, resolveClientConfig, resolveMegacallConfig } from './config';
+import { loadRespectifyConfig, resolveClientConfig, resolveMegacallConfig, resolveTolerances } from './config';
 import { RESPECTIFY_API_KEY, RESPECTIFY_EMAIL } from 'astro:env/server';
 import {
   RespectifyClient,
@@ -86,6 +86,10 @@ export async function verifyRespectifyCredentials(): Promise<boolean> {
   }
 }
 
+/** Shown for suspected spam when an API sends no suggestion. */
+const DEFAULT_SUSPECTED_SPAM_SUGGESTION =
+  'This looks like spam. Please revise it and say what you think about the discussion.';
+
 function buildSuggestion(result: MegaCallResult, showFeedback: boolean): string | undefined {
   if (!showFeedback || !result.comment_score) return undefined;
 
@@ -114,6 +118,37 @@ function buildSuggestion(result: MegaCallResult, showFeedback: boolean): string 
   }
 
   return suggestions.length > 0 ? suggestions.join(' ') : undefined;
+}
+
+/**
+ * Approve, warn or block on the comment's content.
+ *
+ * With a comment score, `exceeds_tolerance` decides whether there is a problem at all:
+ * - false: approved, whatever the toxicity (toxicity_score is not adjusted for the site's
+ *   tolerances, so a comment the site accepts is not held back by it)
+ * - true: blocked when respectfulness < thresholds.block and blockDisrespectful is on;
+ *   otherwise a warning, approved only when allowOverride is on
+ *
+ * Without exceeds_tolerance the respectfulness bands decide as before: >= autoApprove
+ * approves, < block blocks, anything between warns. With no comment score at all the score
+ * is autoApprove, so the comment is approved; a comment score lacking exceeds_tolerance
+ * (an API older than moderation tolerances) falls back to the bands on 1 - toxicity_score.
+ */
+function decideOnContent(
+  config: RespectifyConfig,
+  respectfulnessScore: number,
+  exceedsTolerance: boolean | undefined,
+): Pick<RespectifyAnalysisResult, 'approved' | 'feedback'> {
+  const isWithinTolerance =
+    exceedsTolerance === undefined ? respectfulnessScore >= config.thresholds.autoApprove : !exceedsTolerance;
+
+  if (isWithinTolerance) {
+    return { approved: true, feedback: config.feedback.approved };
+  }
+  if (respectfulnessScore < config.thresholds.block && config.moderation.blockDisrespectful) {
+    return { approved: false, feedback: config.feedback.blocked };
+  }
+  return { approved: config.moderation.allowOverride, feedback: config.feedback.warning };
 }
 
 export async function analyzeComment(
@@ -169,6 +204,12 @@ export async function analyzeComment(
       megacallOptions.replyToComment = options.replyToComment;
     }
 
+    // Tolerances only shape the comment score, which needs topic context
+    const tolerances = resolveTolerances(config);
+    if (tolerances && megacallOptions.includeCommentScore) {
+      megacallOptions.tolerances = tolerances;
+    }
+
     const result = await respectifyClient.megacall(megacallOptions);
     const showFeedback = config.moderation.showFeedbackToUser !== false;
 
@@ -178,8 +219,20 @@ export async function analyzeComment(
         approved: false,
         feedback: 'This comment appears to be spam.',
         isSpam: true,
+        suspectedSpam: false,
         spamConfidence: result.spam_check.confidence,
       };
+    }
+
+    // Suspected spam is not spam: the other checks still run, but the comment is sent back
+    // with the server's suggestion. An older API omits suspected_spam, meaning not suspected.
+    const spamFields: Pick<RespectifyAnalysisResult, 'isSpam' | 'suspectedSpam' | 'spamSuggestion'> = {};
+    if (result.spam_check) {
+      spamFields.isSpam = false;
+      spamFields.suspectedSpam = result.spam_check.suspected_spam === true;
+      if (spamFields.suspectedSpam) {
+        spamFields.spamSuggestion = result.spam_check.suggestion || DEFAULT_SUSPECTED_SPAM_SUGGESTION;
+      }
     }
 
     const blockOffTopic = config.moderation.blockOffTopic !== false;
@@ -192,6 +245,7 @@ export async function analyzeComment(
           approved: false,
           feedback: config.feedback.offTopic ?? 'This comment appears to be off-topic.',
           suggestion: showFeedback ? on_topic.reasoning || banned_topics.reasoning : undefined,
+          ...spamFields,
         };
       }
     }
@@ -203,35 +257,32 @@ export async function analyzeComment(
         approved: false,
         feedback: config.feedback.dogwhistle ?? 'This comment was blocked due to policy violations.',
         suggestion: showFeedback ? result.dogwhistle_check.detection.reasoning : undefined,
+        ...spamFields,
       };
     }
 
-    let respectfulnessScore = config.thresholds.autoApprove;
+    // Respectfulness is 1 - toxicity_score. Without a comment score there is nothing to
+    // judge content by, so the comment is treated as at the auto-approve threshold.
+    const respectfulnessScore = result.comment_score
+      ? 1 - (result.comment_score.toxicity_score ?? 0)
+      : config.thresholds.autoApprove;
+    const exceedsTolerance = result.comment_score?.exceeds_tolerance;
 
-    if (result.comment_score) {
-      const toxicityScore = result.comment_score.toxicity_score ?? 0;
-      respectfulnessScore = 1 - toxicityScore;
-    }
-
-    let approved = false;
-    let feedback = '';
-
-    if (respectfulnessScore >= config.thresholds.autoApprove) {
-      approved = true;
-      feedback = config.feedback.approved;
-    } else if (respectfulnessScore < config.thresholds.block && config.moderation.blockDisrespectful) {
-      approved = false;
-      feedback = config.feedback.blocked;
-    } else {
-      approved = config.moderation.allowOverride;
-      feedback = config.feedback.warning;
-    }
+    const contentDecision = decideOnContent(config, respectfulnessScore, exceedsTolerance);
+    // Suspected spam always goes back to the commenter, whatever the content decision
+    const { approved, feedback } = spamFields.spamSuggestion
+      ? { approved: false, feedback: spamFields.spamSuggestion }
+      : contentDecision;
 
     const analysisResult: RespectifyAnalysisResult = {
       score: respectfulnessScore,
       approved,
       feedback,
+      ...spamFields,
     };
+    if (exceedsTolerance !== undefined) analysisResult.exceedsTolerance = exceedsTolerance;
+    if (result.comment_score?.health_score !== undefined) analysisResult.healthScore = result.comment_score.health_score;
+    if (result.comment_score?.health_items !== undefined) analysisResult.healthItems = result.comment_score.health_items;
 
     const suggestion = buildSuggestion(result, showFeedback);
     if (suggestion) analysisResult.suggestion = suggestion;

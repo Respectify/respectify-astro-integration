@@ -1,6 +1,6 @@
 {
   "name": "@respectify/astro",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Respectify-powered commenting for Astro — AI moderation, spam filtering, and beautiful UX out of the box.",
   "type": "module",
   "license": "MIT",
@@ -48,7 +48,7 @@
   ],
   "peerDependencies": {
     "@astrojs/db": "^0.20.0",
-    "@respectify/client": "^0.2.3",
+    "@respectify/client": "^0.7.0",
     "astro": "^5.0.0 || ^6.0.0",
     "zod": "^3.0.0"
   },
@@ -61,12 +61,14 @@
     "zod": "^3.24.0"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@astrojs/db": "^0.20.0",
-    "@respectify/client": "^0.2.3",
+    "@respectify/client": "^0.7.0",
     "astro": "^6.0.4",
-    "typescript": "^5.4.3"
+    "typescript": "^5.4.3",
+    "vitest": "^3.2.4"
   }
 }
