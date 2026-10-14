@@ -254,7 +254,7 @@ Tolerances shape the comment score, so they are only sent when a comment score r
 
 ### How comments are approved, warned or blocked
 
-Spam, off-topic (`blockOffTopic`) and dogwhistle (`blockDogwhistles`) rejections come first. Then, on content:
+Spam, off-topic (`blockOffTopic`) and dogwhistle (`blockDogwhistles`) rejections come first. Suspected spam is not spam: the comment is sent back to the commenter (never approved, even with `allowOverride`) with the server's suggestion as `feedback`, such as "This looks like spam. How about removing the link?", while any comment-health coaching stays in `suggestion`. The analysis result carries `suspectedSpam` and `spamSuggestion` (and `isSpam: false`) whenever a spam check ran; `suspectedSpam` is `false` when an older API omits it, and the `comments.submit` action returns `suspectedSpam` for a comment it did not publish. Then, on content:
 
 | Comment score says | Respectfulness (`1 - toxicity_score`) | Result |
 | --- | --- | --- |

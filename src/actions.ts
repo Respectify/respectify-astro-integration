@@ -58,6 +58,7 @@ export const respectifyCommentActions = {
           approved: false as const,
           feedback: analysis.feedback,
           suggestion: analysis.suggestion,
+          suspectedSpam: analysis.suspectedSpam === true,
           score: analysis.score,
         };
       }

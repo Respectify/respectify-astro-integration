@@ -77,8 +77,17 @@ export interface RespectifyAnalysisResult {
   approved: boolean;
   feedback: string;
   suggestion?: string;
+  /** True when the comment is spam: it is rejected */
   isSpam?: boolean;
   spamConfidence?: number;
+  /**
+   * True when the comment looks like spam but is not certain. It is not approved (never,
+   * even with `allowOverride`), but it is not rejected as spam either: `feedback` carries
+   * the server's suggestion so the commenter can revise it. Set when a spam check ran.
+   */
+  suspectedSpam?: boolean;
+  /** The server's suggestion for a suspected-spam comment, such as to remove a link */
+  spamSuggestion?: string;
   /** True when the comment score found a problem the site's tolerances do not accept */
   exceedsTolerance?: boolean;
   /** Comment health, 1.0-5.0, when the API returned it */

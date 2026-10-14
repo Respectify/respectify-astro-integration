@@ -398,3 +398,112 @@ describe('checks that short-circuit before the content decision', () => {
     expect(result.suggestion).toBe('Coded language.');
   });
 });
+
+describe('suspected spam', () => {
+  const LINK_SUGGESTION = 'This looks like spam. How about removing the link?';
+  /** A comment score the site would accept, so only the spam verdict decides. */
+  const acceptableScore = commentScore({ toxicity_score: 0, exceeds_tolerance: false });
+  const suspectedSpamCheck = {
+    is_spam: false,
+    confidence: 0.6,
+    reasoning: 'Looks promotional.',
+    suspected_spam: true,
+    suggestion: LINK_SUGGESTION,
+  };
+
+  it('sends suspected spam back with the suggestion instead of rejecting it as spam', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(megacallResult({ comment_score: acceptableScore, spam_check: suspectedSpamCheck }));
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.isSpam).toBe(false);
+    expect(result.suspectedSpam).toBe(true);
+    expect(result.spamSuggestion).toBe(LINK_SUGGESTION);
+    expect(result.feedback).toBe(LINK_SUGGESTION);
+    expect(result.exceedsTolerance).toBe(false);
+  });
+
+  it('never approves suspected spam through allowOverride', async () => {
+    const analyzeComment = await loadAnalyzeComment(withModeration({ allowOverride: true }));
+    api.respondToMegacallWith(megacallResult({ comment_score: acceptableScore, spam_check: suspectedSpamCheck }));
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.suspectedSpam).toBe(true);
+  });
+
+  it('keeps the comment-health suggestion alongside the spam suggestion', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(
+      megacallResult({
+        comment_score: commentScore({
+          toxicity_score: 0.8,
+          exceeds_tolerance: true,
+          toxicity_explanation: 'Calling someone an idiot is an insult.',
+        }),
+        spam_check: suspectedSpamCheck,
+      }),
+    );
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.suspectedSpam).toBe(true);
+    expect(result.feedback).toBe(LINK_SUGGESTION);
+    expect(result.suggestion).toBe('Calling someone an idiot is an insult.');
+    expect(result.exceedsTolerance).toBe(true);
+  });
+
+  it('marks spam as spam, not suspected', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(
+      megacallResult({
+        comment_score: acceptableScore,
+        spam_check: { is_spam: true, confidence: 0.95, reasoning: 'Link farm.', suspected_spam: false, suggestion: '' },
+      }),
+    );
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.isSpam).toBe(true);
+    expect(result.suspectedSpam).toBe(false);
+    expect(result.feedback).toBe('This comment appears to be spam.');
+  });
+
+  it('publishes a comment that is neither spam nor suspected', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(
+      megacallResult({
+        comment_score: acceptableScore,
+        spam_check: { is_spam: false, confidence: 0.9, reasoning: '', suspected_spam: false, suggestion: '' },
+      }),
+    );
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(true);
+    expect(result.feedback).toBe('APPROVED');
+    expect(result.isSpam).toBe(false);
+    expect(result.suspectedSpam).toBe(false);
+    expect(result.spamSuggestion).toBeUndefined();
+  });
+
+  it('treats an older API without suspected_spam as not suspected', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(
+      megacallResult({
+        comment_score: acceptableScore,
+        spam_check: { is_spam: false, confidence: 0.9, reasoning: '' },
+      }),
+    );
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(true);
+    expect(result.suspectedSpam).toBe(false);
+  });
+});

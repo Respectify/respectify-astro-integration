@@ -86,6 +86,10 @@ export async function verifyRespectifyCredentials(): Promise<boolean> {
   }
 }
 
+/** Shown for suspected spam when an API sends no suggestion. */
+const DEFAULT_SUSPECTED_SPAM_SUGGESTION =
+  'This looks like spam. Please revise it and say what you think about the discussion.';
+
 function buildSuggestion(result: MegaCallResult, showFeedback: boolean): string | undefined {
   if (!showFeedback || !result.comment_score) return undefined;
 
@@ -215,8 +219,20 @@ export async function analyzeComment(
         approved: false,
         feedback: 'This comment appears to be spam.',
         isSpam: true,
+        suspectedSpam: false,
         spamConfidence: result.spam_check.confidence,
       };
+    }
+
+    // Suspected spam is not spam: the other checks still run, but the comment is sent back
+    // with the server's suggestion. An older API omits suspected_spam, meaning not suspected.
+    const spamFields: Pick<RespectifyAnalysisResult, 'isSpam' | 'suspectedSpam' | 'spamSuggestion'> = {};
+    if (result.spam_check) {
+      spamFields.isSpam = false;
+      spamFields.suspectedSpam = result.spam_check.suspected_spam === true;
+      if (spamFields.suspectedSpam) {
+        spamFields.spamSuggestion = result.spam_check.suggestion || DEFAULT_SUSPECTED_SPAM_SUGGESTION;
+      }
     }
 
     const blockOffTopic = config.moderation.blockOffTopic !== false;
@@ -229,6 +245,7 @@ export async function analyzeComment(
           approved: false,
           feedback: config.feedback.offTopic ?? 'This comment appears to be off-topic.',
           suggestion: showFeedback ? on_topic.reasoning || banned_topics.reasoning : undefined,
+          ...spamFields,
         };
       }
     }
@@ -240,6 +257,7 @@ export async function analyzeComment(
         approved: false,
         feedback: config.feedback.dogwhistle ?? 'This comment was blocked due to policy violations.',
         suggestion: showFeedback ? result.dogwhistle_check.detection.reasoning : undefined,
+        ...spamFields,
       };
     }
 
@@ -250,12 +268,17 @@ export async function analyzeComment(
       : config.thresholds.autoApprove;
     const exceedsTolerance = result.comment_score?.exceeds_tolerance;
 
-    const { approved, feedback } = decideOnContent(config, respectfulnessScore, exceedsTolerance);
+    const contentDecision = decideOnContent(config, respectfulnessScore, exceedsTolerance);
+    // Suspected spam always goes back to the commenter, whatever the content decision
+    const { approved, feedback } = spamFields.spamSuggestion
+      ? { approved: false, feedback: spamFields.spamSuggestion }
+      : contentDecision;
 
     const analysisResult: RespectifyAnalysisResult = {
       score: respectfulnessScore,
       approved,
       feedback,
+      ...spamFields,
     };
     if (exceedsTolerance !== undefined) analysisResult.exceedsTolerance = exceedsTolerance;
     if (result.comment_score?.health_score !== undefined) analysisResult.healthScore = result.comment_score.health_score;
