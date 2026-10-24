@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { AstroIntegration } from 'astro';
 import { envField } from 'astro/config';
 import { parseIntegrationOptions, toResolvedIntegrationOptions } from './options';
-import type { RespectifyIntegrationOptions, RespectifyRuntime } from './types';
+import type { RespectifyIntegrationOptions } from './types';
 
 const OPTIONS_MODULE_ID = 'virtual:@respectify/astro/options';
 const RUNTIME_MODULE_ID = 'virtual:@respectify/astro/runtime';
@@ -94,20 +94,11 @@ export default function respectify(userOptions: RespectifyIntegrationOptions): A
 }
 
 /**
- * Define the runtime module named by `respectify({ runtime })`. Its default export must be
- * the value this returns:
- *
- * ```ts
- * // src/respectify.runtime.ts
- * import { defineRespectifyRuntime } from '@respectify/astro';
- * import { createSqliteCommentStore } from '@respectify/astro/sqlite';
- *
- * export default defineRespectifyRuntime({ store: createSqliteCommentStore(db) });
- * ```
+ * Re-exported for compatibility. Runtime modules should import `defineRespectifyRuntime` from
+ * `@respectify/astro/runtime`: this entry is the integration and imports `astro/config`, which
+ * bundling adapters such as Vercel cannot put in a server function.
  */
-export function defineRespectifyRuntime(runtime: RespectifyRuntime): RespectifyRuntime {
-  return runtime;
-}
+export { defineRespectifyRuntime } from './define-runtime';
 
 export type {
   RespectifyIntegrationOptions,

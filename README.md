@@ -70,7 +70,7 @@ The store, and any functions, live in a module that runs inside your server bund
 
 ```ts
 // src/respectify.runtime.ts
-import { defineRespectifyRuntime } from '@respectify/astro';
+import { defineRespectifyRuntime } from '@respectify/astro/runtime';
 import { createPostgresCommentStore } from '@respectify/astro/postgres';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
@@ -84,6 +84,8 @@ export default defineRespectifyRuntime({
   getPostUrl: (slug, site) => `${site}/blog/${slug}/`,
 });
 ```
+
+Import `defineRespectifyRuntime` from `@respectify/astro/runtime`, not `@respectify/astro`: the main entry is the integration and imports Astro's config, which bundling adapters such as Vercel can't put in a server function.
 
 For SQLite, use `createSqliteCommentStore(db)` from `@respectify/astro/sqlite` with your Drizzle SQLite database (for libSQL/Turso, `drizzle({ client: createClient({ url, authToken }) })` from `drizzle-orm/libsql`).
 
@@ -366,7 +368,7 @@ The SQLite store's default table is exactly the `Comment` table Astro DB created
 
    ```ts
    // src/respectify.runtime.ts
-   import { defineRespectifyRuntime } from '@respectify/astro';
+   import { defineRespectifyRuntime } from '@respectify/astro/runtime';
    import { createSqliteCommentStore } from '@respectify/astro/sqlite';
    import { createClient } from '@libsql/client';
    import { drizzle } from 'drizzle-orm/libsql';
