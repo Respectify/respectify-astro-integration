@@ -1,0 +1,30 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The supported Astro majors: the package's peer range is ^5 || ^6 || ^7
+        astro: ['5', '6', '7']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - name: Use Astro ${{ matrix.astro }}
+        run: npm install --no-save "astro@^${{ matrix.astro }}"
+
+      - run: npm run typecheck
+
+      - run: npm test

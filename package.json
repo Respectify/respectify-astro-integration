@@ -1,7 +1,7 @@
 {
   "name": "@respectify/astro",
-  "version": "0.2.0",
-  "description": "Respectify-powered commenting for Astro — AI moderation, spam filtering, and beautiful UX out of the box.",
+  "version": "1.0.0",
+  "description": "Respectify-powered commenting for Astro \u2014 AI moderation, spam filtering, and beautiful UX out of the box.",
   "type": "module",
   "license": "MIT",
   "author": "Respectify",
@@ -31,30 +31,46 @@
     ".": "./src/index.ts",
     "./actions": "./src/actions.ts",
     "./credentials": "./src/credentials.ts",
-    "./schema": "./src/schema.ts",
     "./routes/comments": "./src/routes/comments.ts",
     "./components/CommentSection.astro": "./components/CommentSection.astro",
     "./components/PoweredByRespectify.astro": "./components/PoweredByRespectify.astro",
     "./client": "./client/comments.ts",
-    "./styles.css": "./components/respectify-comments.css"
+    "./styles.css": "./components/respectify-comments.css",
+    "./postgres": "./src/adapters/postgres/index.ts",
+    "./sqlite": "./src/adapters/sqlite/index.ts",
+    "./testing": "./src/testing/index.ts"
   },
   "files": [
     "src",
     "components",
     "client",
+    "migrations",
+    "drizzle",
     "default-respectify.config.json",
     "respectify.config.sample.jsonc",
     "README.md"
   ],
   "peerDependencies": {
-    "@astrojs/db": "^0.20.0",
+    "@libsql/client": ">=0.10.0",
     "@respectify/client": "^0.7.0",
-    "astro": "^5.0.0 || ^6.0.0",
+    "astro": "^5.0.0 || ^6.0.0 || ^7.0.0",
+    "drizzle-orm": "^0.45.0",
+    "pg": "^8.0.0",
+    "vitest": "^3.0.0",
     "zod": "^3.0.0"
   },
   "peerDependenciesMeta": {
-    "@astrojs/db": {
-      "optional": false
+    "@libsql/client": {
+      "optional": true
+    },
+    "drizzle-orm": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "vitest": {
+      "optional": true
     }
   },
   "dependencies": {
@@ -62,12 +78,16 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrations:generate": "drizzle-kit generate --config drizzle/postgres.config.ts && drizzle-kit generate --config drizzle/sqlite.config.ts"
   },
   "devDependencies": {
-    "@astrojs/db": "^0.20.0",
+    "@electric-sql/pglite": "0.5.8",
+    "@libsql/client": "^0.18.0",
     "@respectify/client": "^0.7.0",
     "astro": "^6.0.4",
+    "drizzle-kit": "^0.31.11",
+    "drizzle-orm": "^0.45.4",
     "typescript": "^5.4.3",
     "vitest": "^3.2.4"
   }

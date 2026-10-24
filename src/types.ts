@@ -4,6 +4,7 @@ import type {
   ModerationTolerances,
   RespectifyClientOptions,
 } from '@respectify/client';
+import type { ICommentStore } from './store/types';
 
 /**
  * Options forwarded to `RespectifyClient`.
@@ -18,20 +19,27 @@ export type RespectifyClientConfig = Partial<RespectifyClientOptions>;
  */
 export type RespectifyMegacallConfig = Omit<MegacallOptions, 'comment' | 'articleId' | 'tolerances'>;
 
+/**
+ * Client options the integration accepts in astro.config. Credentials are not among them:
+ * options are serialized into the server bundle, so credentials come from the
+ * `RESPECTIFY_EMAIL` / `RESPECTIFY_API_KEY` env vars (or respectify.config.json) instead.
+ */
+export type RespectifyIntegrationClientConfig = Omit<RespectifyClientConfig, 'email' | 'apiKey'>;
+
+/**
+ * Options for `respectify()` in astro.config. Every option must be serializable: they are
+ * passed to the server bundle as JSON. Functions and the comment store belong in the
+ * runtime module (see `defineRespectifyRuntime`).
+ */
 export interface RespectifyIntegrationOptions {
+  /**
+   * The runtime module: a file whose default export is `defineRespectifyRuntime({ store, ... })`.
+   * A relative path is resolved against the project root; a package specifier is left to Vite.
+   */
+  runtime: string;
+
   /** Path to respectify.config.json (default: ./respectify.config.json) */
   configPath?: string;
-
-  /** Build the canonical URL for a post — used to initialize Respectify topics */
-  getPostUrl?: (slug: string, site: string) => string;
-
-  /**
-   * Provide a post's raw text content directly instead of having Respectify fetch
-   * `getPostUrl`. Useful when the URL isn't publicly fetchable (staged/preview content,
-   * auth-gated pages, or timing issues right after deploy). Takes priority over
-   * `getPostUrl` for topic initialization when provided.
-   */
-  getPostContent?: (slug: string) => string | Promise<string>;
 
   /** API route path for fetching comments (default: /api/respectify/comments) */
   commentsApiPath?: string;
@@ -46,10 +54,9 @@ export interface RespectifyIntegrationOptions {
   };
 
   /**
-   * Options forwarded to the Respectify API client
-   * (`baseUrl`, `timeout`, `version`, `website`, optional credential overrides).
+   * Options forwarded to the Respectify API client (`baseUrl`, `timeout`, `version`, `website`).
    */
-  client?: RespectifyClientConfig;
+  client?: RespectifyIntegrationClientConfig;
 
   /**
    * Options forwarded to every Respectify megacall
@@ -65,6 +72,40 @@ export interface RespectifyIntegrationOptions {
    * be "permissive", "relaxed" or "off".
    */
   tolerances?: ModerationTolerances;
+}
+
+/** The integration options as the server bundle sees them, with defaults applied. */
+export interface ResolvedIntegrationOptions {
+  configPath: string;
+  commentsApiPath: string;
+  showBranding: boolean;
+  rateLimit: {
+    windowMs: number;
+    maxRequests: number;
+  };
+  client?: RespectifyIntegrationClientConfig;
+  megacall?: RespectifyMegacallConfig;
+  tolerances?: ModerationTolerances;
+}
+
+/**
+ * What the runtime module provides: the parts of the integration that are not serializable.
+ * It is loaded in the server bundle, so it may hold database clients and functions.
+ */
+export interface RespectifyRuntime {
+  /** Where comments are kept */
+  store: ICommentStore;
+
+  /** Build the canonical URL for a post, used to initialize Respectify topics (default: `${site}/posts/${slug}/`) */
+  getPostUrl?: (slug: string, site: string) => string;
+
+  /**
+   * Provide a post's raw text content directly instead of having Respectify fetch
+   * `getPostUrl`. Useful when the URL isn't publicly fetchable (staged/preview content,
+   * auth-gated pages, or timing issues right after deploy). Takes priority over
+   * `getPostUrl` for topic initialization when provided.
+   */
+  getPostContent?: (slug: string) => string | Promise<string>;
 }
 
 export interface AnalyzeCommentOptions {

@@ -9,7 +9,7 @@ import {
   type MegacallOptions,
   type MegaCallResult,
 } from '@respectify/client';
-import { getIntegrationOptions } from '../runtime-config';
+import { getRespectifyRuntime } from '../runtime';
 import { logger } from './logger';
 import type { AnalyzeCommentOptions, RespectifyAnalysisResult } from '../types';
 
@@ -54,7 +54,7 @@ async function getOrInitializeArticleId(postSlug: string, config: RespectifyConf
   const cached = articleIdCache.get(postSlug);
   if (cached) return cached;
 
-  const { getPostUrl, getPostContent } = getIntegrationOptions();
+  const { getPostUrl, getPostContent } = getRespectifyRuntime();
   const respectifyClient = getRespectifyClient(config);
   const topicDescription = `Post: ${postSlug}`;
 
@@ -65,7 +65,7 @@ async function getOrInitializeArticleId(postSlug: string, config: RespectifyConf
         if (!site) {
           throw new Error('import.meta.env.SITE must be set in astro.config.ts for Respectify topic initialization.');
         }
-        return respectifyClient.initTopicFromUrl(getPostUrl!(postSlug, site), topicDescription);
+        return respectifyClient.initTopicFromUrl(getPostUrl(postSlug, site), topicDescription);
       })());
 
   articleIdCache.set(postSlug, result.article_id);

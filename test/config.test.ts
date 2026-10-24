@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { FLOORED_MODERATION_CATEGORIES, TOLERANCE_LEVELS } from '@respectify/client';
 import { loadRespectifyConfig, resolveTolerances } from '../src/lib/config';
-import { setIntegrationOptions } from '../src/runtime-config';
+import { setTestIntegrationOptions } from './stubs/respectify-options';
 import { baseConfig, createConfigFileDirectory } from './helpers/config-file';
 
 const TUNABLE_CATEGORIES = ['insult', 'profanity', 'dismissive_tone', 'logical_fallacy', 'low_effort'] as const;
@@ -15,13 +15,13 @@ afterAll(() => {
 /** Point the integration at a config file holding these tolerances, then load it. */
 function loadWithTolerances(tolerances: Record<string, string>): ReturnType<typeof loadRespectifyConfig> {
   const configPath = configFiles.write({ ...baseConfig(), tolerances });
-  setIntegrationOptions({ configPath });
+  setTestIntegrationOptions({ configPath });
   return loadRespectifyConfig();
 }
 
 describe('tolerances schema', () => {
   beforeEach(() => {
-    setIntegrationOptions({});
+    setTestIntegrationOptions({});
   });
 
   it.each(FLOORED_MODERATION_CATEGORIES)('rejects relaxed for the floored category %s', (category) => {
@@ -102,7 +102,7 @@ describe('tolerances schema', () => {
 
   it('leaves tolerances undefined when the config omits them', () => {
     const configPath = configFiles.write(baseConfig());
-    setIntegrationOptions({ configPath });
+    setTestIntegrationOptions({ configPath });
 
     expect(loadRespectifyConfig().tolerances).toBeUndefined();
   });
@@ -110,7 +110,7 @@ describe('tolerances schema', () => {
 
 describe('resolveTolerances', () => {
   beforeEach(() => {
-    setIntegrationOptions({});
+    setTestIntegrationOptions({});
   });
 
   it('returns undefined when neither the config nor the integration names a category', () => {
@@ -118,7 +118,7 @@ describe('resolveTolerances', () => {
   });
 
   it('returns undefined when both name an empty set of categories', () => {
-    setIntegrationOptions({ tolerances: {} });
+    setTestIntegrationOptions({ tolerances: {} });
 
     expect(resolveTolerances({ ...baseConfig(), tolerances: {} })).toBeUndefined();
   });
@@ -128,13 +128,13 @@ describe('resolveTolerances', () => {
   });
 
   it('returns the integration tolerances when the config sets none', () => {
-    setIntegrationOptions({ tolerances: { threat: 'strict' } });
+    setTestIntegrationOptions({ tolerances: { threat: 'strict' } });
 
     expect(resolveTolerances(baseConfig())).toEqual({ threat: 'strict' });
   });
 
   it('merges per category, with the integration winning where both name the same category', () => {
-    setIntegrationOptions({ tolerances: { threat: 'zero_tolerance', profanity: 'strict' } });
+    setTestIntegrationOptions({ tolerances: { threat: 'zero_tolerance', profanity: 'strict' } });
     const config = { ...baseConfig(), tolerances: { threat: 'strict', insult: 'relaxed' } as const };
 
     expect(resolveTolerances(config)).toEqual({ threat: 'zero_tolerance', insult: 'relaxed', profanity: 'strict' });

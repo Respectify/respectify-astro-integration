@@ -1,12 +1,8 @@
 /// <reference types="astro/client" />
 
-import '@astrojs/db';
-
-declare global {
-  namespace App {
-    interface Locals {
-      isAuthenticated?: boolean;
-    }
+declare namespace App {
+  interface Locals {
+    isAuthenticated?: boolean;
   }
 }
 
@@ -15,9 +11,12 @@ declare module 'astro:env/server' {
   export const RESPECTIFY_API_KEY: string | undefined;
 }
 
-declare module 'astro:db' {
-  export const Comment: import('@astrojs/db/runtime').Table<
-    'Comment',
-    typeof import('./schema').RespectifyComment.columns
-  >;
+declare module 'virtual:@respectify/astro/options' {
+  const options: import('./types').ResolvedIntegrationOptions;
+  export default options;
+}
+
+declare module 'virtual:@respectify/astro/runtime' {
+  const runtime: import('./types').RespectifyRuntime;
+  export default runtime;
 }

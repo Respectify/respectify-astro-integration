@@ -3,6 +3,8 @@ export interface CommentResponse {
   author: string;
   content: string;
   createdAt: string;
+  /** The comment this one replies to, or null for a top-level comment */
+  parentId: number | null;
 }
 
 export function formatCommentDate(date: string | Date): string {

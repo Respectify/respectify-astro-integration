@@ -1,39 +1,13 @@
-import type { RespectifyIntegrationOptions, RespectifyClientConfig, RespectifyMegacallConfig } from './types';
+import options from 'virtual:@respectify/astro/options';
+import type { ResolvedIntegrationOptions } from './types';
 
-export type ResolvedIntegrationOptions = Required<
-  Pick<RespectifyIntegrationOptions, 'configPath' | 'commentsApiPath' | 'showBranding'>
-> &
-  Pick<RespectifyIntegrationOptions, 'getPostUrl' | 'getPostContent' | 'rateLimit' | 'client' | 'megacall' | 'tolerances'>;
-
-const defaults: ResolvedIntegrationOptions = {
-  configPath: './respectify.config.json',
-  commentsApiPath: '/api/respectify/comments',
-  showBranding: true,
-  getPostUrl: (slug, site) => `${site.replace(/\/$/, '')}/posts/${slug}/`,
-  getPostContent: undefined,
-  rateLimit: { windowMs: 5 * 60 * 1000, maxRequests: 10 },
-  client: undefined,
-  megacall: undefined,
-  tolerances: undefined,
-};
-
-let options: ResolvedIntegrationOptions = { ...defaults };
-
-export function setIntegrationOptions(userOptions: RespectifyIntegrationOptions = {}): void {
-  options = {
-    ...defaults,
-    ...userOptions,
-    getPostUrl: userOptions.getPostUrl ?? defaults.getPostUrl,
-    getPostContent: userOptions.getPostContent,
-    rateLimit: userOptions.rateLimit ?? defaults.rateLimit,
-    client: userOptions.client,
-    megacall: userOptions.megacall,
-    tolerances: userOptions.tolerances,
-  };
-}
-
+/**
+ * The options given to `respectify()` in astro.config, with defaults applied. They reach the
+ * server bundle through the `virtual:@respectify/astro/options` module, which the integration
+ * writes at setup; module state set in astro.config would not.
+ */
 export function getIntegrationOptions(): ResolvedIntegrationOptions {
   return options;
 }
 
-export type { RespectifyClientConfig, RespectifyMegacallConfig };
+export type { ResolvedIntegrationOptions };

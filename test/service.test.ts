@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RespectifyConfig } from '../src/lib/config';
 import type { analyzeComment as AnalyzeComment } from '../src/lib/service';
-import type { RespectifyIntegrationOptions } from '../src/types';
+import type { ResolvedIntegrationOptions } from '../src/types';
 import { baseConfig, createConfigFileDirectory } from './helpers/config-file';
 import {
   FAKE_ARTICLE_ID,
@@ -32,14 +32,18 @@ beforeEach(() => {
  */
 async function loadAnalyzeComment(
   config: RespectifyConfig,
-  integrationOptions: RespectifyIntegrationOptions = {},
+  integrationOptions: Partial<ResolvedIntegrationOptions> = {},
 ): Promise<typeof AnalyzeComment> {
   vi.resetModules();
-  const runtimeConfig = await import('../src/runtime-config');
-  runtimeConfig.setIntegrationOptions({
-    configPath: configFiles.write(config),
+  const [{ setTestIntegrationOptions }, { setTestRuntime }, { createInMemoryCommentStore }] = await Promise.all([
+    import('./stubs/respectify-options'),
+    import('./stubs/respectify-runtime'),
+    import('./helpers/in-memory-comment-store'),
+  ]);
+  setTestIntegrationOptions({ configPath: configFiles.write(config), ...integrationOptions });
+  setTestRuntime({
+    store: createInMemoryCommentStore(),
     getPostContent: async () => 'The post the comments are about.',
-    ...integrationOptions,
   });
   const service = await import('../src/lib/service');
   return service.analyzeComment;
