@@ -85,7 +85,7 @@ describe('tolerances schema', () => {
   });
 
   it('rejects an unknown level on a tunable category', () => {
-    expect(() => loadWithTolerances({ insult: 'lenient' })).toThrow(/Invalid enum value/);
+    expect(() => loadWithTolerances({ insult: 'lenient' })).toThrow(/Invalid option/);
   });
 
   it('rejects an unknown level on a floored category with the default message, not the floor message', () => {
@@ -96,7 +96,7 @@ describe('tolerances schema', () => {
       if (error instanceof Error) thrown = error;
     }
 
-    expect(thrown?.message).toMatch(/Invalid enum value/);
+    expect(thrown?.message).toMatch(/Invalid option/);
     expect(thrown?.message).not.toMatch(/can be made stricter but not relaxed/);
   });
 

@@ -15,17 +15,15 @@ export type WireMegaCallResult = Omit<MegaCallResult, 'comment_score'> & {
 };
 
 /** The parts of the megacall request body the tests assert on. */
-const MegacallRequestBodySchema = z
-  .object({
+const MegacallRequestBodySchema = z.looseObject({
     comment: z.string(),
     run_spam_check: z.boolean(),
     run_relevance_check: z.boolean(),
     run_comment_score: z.boolean(),
     run_dogwhistle_check: z.boolean(),
     article_context_id: z.string().optional(),
-    tolerances: z.record(z.string()).optional(),
-  })
-  .passthrough();
+    tolerances: z.record(z.string(), z.string()).optional(),
+});
 
 export type MegacallRequestBody = z.infer<typeof MegacallRequestBodySchema>;
 

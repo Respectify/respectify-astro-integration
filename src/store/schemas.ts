@@ -6,22 +6,20 @@ import type { NewComment } from './types';
 export const commentIdSchema = z.number().int().positive();
 
 /** What a store accepts in `create`. Every store validates its input against this. */
-export const newCommentSchema = z
-  .object({
-    postSlug: z.string().min(1).max(COMMENT_LIMITS.postSlugMax),
-    author: z.string().min(1).max(COMMENT_LIMITS.authorMax),
-    email: z.string().email().max(COMMENT_LIMITS.emailMax).optional(),
-    content: z.string().min(1).max(COMMENT_LIMITS.contentMax),
-    approved: z.boolean(),
-    parentId: commentIdSchema.optional(),
-  })
-  .strict() satisfies z.ZodType<NewComment>;
+export const newCommentSchema = z.strictObject({
+  postSlug: z.string().min(1).max(COMMENT_LIMITS.postSlugMax),
+  author: z.string().min(1).max(COMMENT_LIMITS.authorMax),
+  email: z.email().max(COMMENT_LIMITS.emailMax).optional(),
+  content: z.string().min(1).max(COMMENT_LIMITS.contentMax),
+  approved: z.boolean(),
+  parentId: commentIdSchema.optional(),
+}) satisfies z.ZodType<NewComment>;
 
 /** Thrown by a store when `create` is given input that does not match `newCommentSchema`. */
 export class CommentValidationError extends Error {
-  readonly issues: z.ZodIssue[];
+  readonly issues: z.core.$ZodIssue[];
 
-  constructor(issues: z.ZodIssue[]) {
+  constructor(issues: z.core.$ZodIssue[]) {
     super(`Invalid comment: ${issues.map((issue) => `${issue.path.join('.') || 'input'}: ${issue.message}`).join('; ')}`);
     this.name = 'CommentValidationError';
     this.issues = issues;

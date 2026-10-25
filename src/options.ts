@@ -22,29 +22,25 @@ const RUNTIME_ONLY_OPTIONS = ['getPostUrl', 'getPostContent'] as const;
 /** Credentials are never serialized into the server bundle. */
 const CREDENTIAL_CLIENT_OPTIONS = ['email', 'apiKey'] as const;
 
-const clientConfigSchema = z
-  .object({
-    baseUrl: z.string().url().optional(),
-    version: z.string().optional(),
-    timeout: z.number().positive().optional(),
-    website: z.string().optional(),
-  })
-  .strict() satisfies z.ZodType<RespectifyIntegrationClientConfig>;
+const clientConfigSchema = z.strictObject({
+  baseUrl: z.url().optional(),
+  version: z.string().optional(),
+  timeout: z.number().positive().optional(),
+  website: z.string().optional(),
+}) satisfies z.ZodType<RespectifyIntegrationClientConfig>;
 
-const megacallConfigSchema = z
-  .object({
-    includeSpam: z.boolean().optional(),
-    includeRelevance: z.boolean().optional(),
-    includeCommentScore: z.boolean().optional(),
-    includeDogwhistle: z.boolean().optional(),
-    includePerspectiveAnalyzeComment: z.boolean().optional(),
-    bannedTopics: z.array(z.string()).optional(),
-    sensitiveTopics: z.array(z.string()).optional(),
-    dogwhistleExamples: z.array(z.string()).optional(),
-    replyToComment: z.string().optional(),
-    contextComments: z.array(z.string()).optional(),
-  })
-  .strict() satisfies z.ZodType<RespectifyMegacallConfig>;
+const megacallConfigSchema = z.strictObject({
+  includeSpam: z.boolean().optional(),
+  includeRelevance: z.boolean().optional(),
+  includeCommentScore: z.boolean().optional(),
+  includeDogwhistle: z.boolean().optional(),
+  includePerspectiveAnalyzeComment: z.boolean().optional(),
+  bannedTopics: z.array(z.string()).optional(),
+  sensitiveTopics: z.array(z.string()).optional(),
+  dogwhistleExamples: z.array(z.string()).optional(),
+  replyToComment: z.string().optional(),
+  contextComments: z.array(z.string()).optional(),
+}) satisfies z.ZodType<RespectifyMegacallConfig>;
 
 /** Tolerances are checked by the Respectify client's own validator, so the wording matches the API. */
 const tolerancesSchema = z.custom<ModerationTolerances>().superRefine((tolerances, ctx) => {
@@ -52,31 +48,28 @@ const tolerancesSchema = z.custom<ModerationTolerances>().superRefine((tolerance
     validateModerationTolerances(tolerances);
   } catch (error) {
     if (!(error instanceof RespectifyError)) throw error;
-    ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Invalid Respectify tolerances: ${error.message}` });
+    ctx.addIssue({ code: 'custom', message: `Invalid Respectify tolerances: ${error.message}` });
   }
 });
 
-const integrationOptionsSchema = z
-  .object({
-    runtime: z.string().min(1, 'runtime must name the module that calls defineRespectifyRuntime()'),
-    configPath: z.string().min(1).default(DEFAULT_INTEGRATION_OPTIONS.configPath),
-    commentsApiPath: z
-      .string()
-      .startsWith('/', 'commentsApiPath must be a path starting with "/"')
-      .default(DEFAULT_INTEGRATION_OPTIONS.commentsApiPath),
-    showBranding: z.boolean().default(DEFAULT_INTEGRATION_OPTIONS.showBranding),
-    rateLimit: z
-      .object({
-        windowMs: z.number().int().positive(),
-        maxRequests: z.number().int().positive(),
-      })
-      .strict()
-      .default(DEFAULT_INTEGRATION_OPTIONS.rateLimit),
-    client: clientConfigSchema.optional(),
-    megacall: megacallConfigSchema.optional(),
-    tolerances: tolerancesSchema.optional(),
-  })
-  .strict();
+const integrationOptionsSchema = z.strictObject({
+  runtime: z.string().min(1, 'runtime must name the module that calls defineRespectifyRuntime()'),
+  configPath: z.string().min(1).default(DEFAULT_INTEGRATION_OPTIONS.configPath),
+  commentsApiPath: z
+    .string()
+    .startsWith('/', 'commentsApiPath must be a path starting with "/"')
+    .default(DEFAULT_INTEGRATION_OPTIONS.commentsApiPath),
+  showBranding: z.boolean().default(DEFAULT_INTEGRATION_OPTIONS.showBranding),
+  rateLimit: z
+    .strictObject({
+      windowMs: z.number().int().positive(),
+      maxRequests: z.number().int().positive(),
+    })
+    .default(DEFAULT_INTEGRATION_OPTIONS.rateLimit),
+  client: clientConfigSchema.optional(),
+  megacall: megacallConfigSchema.optional(),
+  tolerances: tolerancesSchema.optional(),
+});
 
 /** The validated options: what the server bundle sees, plus the runtime module's specifier. */
 export type ParsedIntegrationOptions = ResolvedIntegrationOptions & { runtime: string };

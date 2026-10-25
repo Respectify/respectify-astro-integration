@@ -22,14 +22,13 @@ const BELOW_FLOOR_TOLERANCE_LEVELS: readonly ToleranceLevel[] = ['off', 'permiss
 /** A floored category's level, rejecting "permissive", "relaxed" and "off" with the same wording the API uses. */
 function flooredToleranceLevelSchema(
   category: FlooredModerationCategory,
-): z.ZodEnum<z.Writeable<typeof FLOORED_TOLERANCE_LEVELS>> {
+): z.ZodEnum<{ [Level in FlooredToleranceLevel]: Level }> {
   return z.enum(FLOORED_TOLERANCE_LEVELS, {
-    errorMap: (_issue, ctx) => ({
-      message:
-        BELOW_FLOOR_TOLERANCE_LEVELS.includes(ctx.data)
-          ? `${category} can be made stricter but not relaxed or turned off`
-          : ctx.defaultError,
-    }),
+    // Returning undefined falls through to Zod's default message for any other invalid value
+    error: (issue) =>
+      BELOW_FLOOR_TOLERANCE_LEVELS.includes(issue.input as ToleranceLevel)
+        ? `${category} can be made stricter but not relaxed or turned off`
+        : undefined,
   });
 }
 
@@ -38,7 +37,7 @@ function flooredToleranceLevelSchema(
  * quality). Items not named are "standard". Unknown items are rejected.
  */
 const ModerationTolerancesSchema = z
-  .object({
+  .strictObject({
     threat: flooredToleranceLevelSchema('threat').optional(),
     identity_attack: flooredToleranceLevelSchema('identity_attack').optional(),
     sexual_content: flooredToleranceLevelSchema('sexual_content').optional(),
@@ -49,8 +48,7 @@ const ModerationTolerancesSchema = z
     logical_fallacy: ToleranceLevelSchema.optional(),
     low_effort: ToleranceLevelSchema.optional(),
     quality: ToleranceLevelSchema.optional(),
-  })
-  .strict() satisfies z.ZodType<ModerationTolerances>;
+  }) satisfies z.ZodType<ModerationTolerances>;
 
 const MegacallConfigSchema = z
   .object({
@@ -67,11 +65,11 @@ const MegacallConfigSchema = z
 
 const ClientConfigSchema = z
   .object({
-    baseUrl: z.string().url().optional(),
+    baseUrl: z.url().optional(),
     version: z.string().optional(),
     timeout: z.number().positive().optional(),
     website: z.string().optional(),
-    email: z.string().email().optional(),
+    email: z.email().optional(),
     apiKey: z.string().optional(),
   })
   .optional();
@@ -79,7 +77,7 @@ const ClientConfigSchema = z
 const RespectifyConfigSchema = z.object({
   enabled: z.boolean(),
   /** @deprecated Prefer `client.baseUrl` — still accepted and mapped to the client base URL */
-  apiEndpoint: z.string().url().optional(),
+  apiEndpoint: z.url().optional(),
   requiresAuth: z.boolean().optional(),
   autoPublish: z
     .object({
