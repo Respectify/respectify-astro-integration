@@ -20,6 +20,7 @@ Built for production — powers [nickhodges.com](https://nickhodges.com) as a li
 - **Never touches your schema** — the package ships table definitions and drizzle-kit migrations; you decide when they run
 - **Self-contained CSS** — no Tailwind required; customize via CSS variables
 - **Fail-closed** — rejects comments when Respectify is unavailable
+- **Free plan aware** — revisions don't use up free comments; when the free plan runs out, comments go through unmoderated and you are told, not your commenters
 
 ## Requirements
 
@@ -261,7 +262,7 @@ respectify({
 });
 ```
 
-The runtime module takes the store and the two optional post functions:
+The runtime module takes the store, the two optional post functions, and two optional callbacks for the site owner:
 
 ```ts
 export default defineRespectifyRuntime({
@@ -272,6 +273,10 @@ export default defineRespectifyRuntime({
   // fetch getPostUrl. Useful for staged/preview/auth-gated content, or when the URL isn't
   // live yet right after deploy. Takes priority over getPostUrl.
   getPostContent: async (slug) => loadPostBody(slug),
+  // The free plan is used up: comments are now published unmoderated. Tell yourself.
+  onModerationStopped: async ({ reason, upgradeUrl, message, postSlug }) => sendAlert(message),
+  // A comment is waiting in your store with approved: false (see "Free plan" below)
+  onHeldForReview: async ({ reason, comment }) => sendAlert(`Comment ${comment.id} awaits review`),
 });
 ```
 
@@ -325,6 +330,18 @@ Spam, off-topic (`blockOffTopic`) and dogwhistle (`blockDogwhistles`) rejections
 
 `exceeds_tolerance` decides whether a comment has a problem at all, because it reflects your site's comment-health tolerances (any item below its minimum, or severe toxicity); `toxicity_score` does not, so it only chooses between warning and blocking. `thresholds.autoApprove` applies only when the API returns a comment score without `exceeds_tolerance` (an API older than tolerances), where the previous bands are used. The returned `exceedsTolerance` field carries the verdict.
 
+### Free plan: revisions, running out, and held comments
+
+A free Respectify account gets 200 comments for life. The integration handles the three things that follow from that; a paid account never sees any of them.
+
+**Revisions are free.** When a comment is sent back to the commenter, the API returns a revision token and `comments.submit` passes it to the browser (`revisionToken` on the unpublished result). The bundled form keeps it in a hidden field and sends it back with the revised comment, so the revision is not counted as a new comment. A comment gets five attempts: the original and four revisions. The token belongs to that one comment and that one form; it is never stored on the server. If you write your own form, send `revisionToken` back in the next `comments.submit` for the same comment and drop it once the comment is published or held.
+
+**When the free plan is used up**, Respectify stops assessing comments. The comment the commenter just wrote is published as it is, like any approved comment, and the commenter sees the ordinary success message (without a score). The published result carries `unmoderated: true`, and the `respectify:comment-published` event's detail carries `unmoderated`, so a site can style such comments if it wants. You are told, not your commenters: the integration logs at error level with the upgrade URL on every unmoderated comment, and calls `onModerationStopped({ reason: 'free_allowance_exhausted', upgradeUrl, message, postSlug })` from your runtime module if you set it. Add credit at the upgrade URL and moderation resumes on the next comment. The ordinary insufficient-balance error on a paid account is unchanged: comments are rejected as "temporarily unavailable", as before.
+
+**When a comment has used all five attempts**, it is neither published nor rejected: it is stored with `approved: false` for you to review, the commenter is told "Thanks, your comment has been sent to the moderators for review." (`comments.submit` returns `{ success: true, approved: false, heldForReview: true, message }`), and `onHeldForReview({ reason: 'revision_limit_reached', comment })` is called if you set it. No schema change is needed: `approved` has always been a column, `listApproved` has always filtered on it, and the integration never used to store unapproved comments, so an `approved = false` row is, by definition, one waiting for you. Set `approved` to true to publish it, or delete it. Replies to a held comment are refused until it is approved, as for any unapproved comment.
+
+The form's `respectify:comment-held` event fires when a comment is held; the comment list does not change.
+
 ### Admin delete (optional)
 
 Set `enableDelete` on `CommentSection` and implement auth so `context.locals.isAuthenticated` is true. See the [Nick-Blog](https://github.com/NickHodges/Nick-Blog) repo for a full admin auth example.
@@ -336,6 +353,8 @@ Visitor submits comment
   → Astro Action (comments.submit)
   → Respectify megacall (configured checks: spam, score, relevance, dogwhistle, …)
   → If approved: store.create() saves it through your ICommentStore
+  → If sent back for revision: the browser keeps the revision token for the resubmission
+  → If held for review (free plan, fifth attempt): store.create() saves it with approved: false
   → Client refreshes comment list via GET /api/respectify/comments (store.listApproved())
 ```
 
