@@ -12,8 +12,24 @@ vi.mock('../src/lib/service', () => ({ analyzeComment: vi.fn() }));
 
 const analyzeCommentMock = vi.mocked(analyzeComment);
 const POST_SLUG = 'a-post';
+const TOKEN = 'b'.repeat(43);
+const UPGRADE_URL = 'https://respectify.ai/dashboard/billing';
 const APPROVED: RespectifyAnalysisResult = { score: 0.9, approved: true, feedback: 'APPROVED' };
 const HELD: RespectifyAnalysisResult = { score: 0.4, approved: false, feedback: 'WARNING', suggestion: 'Be kinder.' };
+/** The free plan is used up: the comment goes through without moderation. */
+const UNMODERATED: RespectifyAnalysisResult = {
+  score: 0.7,
+  approved: true,
+  feedback: 'APPROVED',
+  moderationSkipped: { reason: 'free_allowance_exhausted', upgradeUrl: UPGRADE_URL },
+};
+/** The comment has used all of its attempts: it is stored for the site owner to review. */
+const FOR_REVIEW: RespectifyAnalysisResult = {
+  score: 0,
+  approved: false,
+  heldForReview: true,
+  feedback: 'Thanks, your comment has been sent to the moderators for review.',
+};
 
 let store: ICommentStore;
 let addressCount = 0;
@@ -49,6 +65,18 @@ describe('comments.submit input', () => {
 
     expect(submitCommentInput.safeParse(input).success).toBe(false);
   });
+
+  it('accepts a revision token as the API issues it', () => {
+    const input = { postSlug: POST_SLUG, author: 'Ada', content: 'Hi', revisionToken: 'Ab0-_'.repeat(8) + 'xyz' };
+
+    expect(submitCommentInput.safeParse(input).success).toBe(true);
+  });
+
+  it.each(['', 'has space', 'semi;colon', 'new\nline', 'x'.repeat(129)])('rejects the revision token %j', (revisionToken) => {
+    const input = { postSlug: POST_SLUG, author: 'Ada', content: 'Hi', revisionToken };
+
+    expect(submitCommentInput.safeParse(input).success).toBe(false);
+  });
 });
 
 describe('comments.submit', () => {
@@ -72,12 +100,141 @@ describe('comments.submit', () => {
     expect(result).toEqual({
       success: false,
       approved: false,
+      heldForReview: false,
       feedback: 'WARNING',
       suggestion: 'Be kinder.',
       suspectedSpam: false,
       score: 0.4,
     });
+    expect(result).not.toHaveProperty('revisionToken');
     expect(await store.listApproved(POST_SLUG)).toEqual([]);
+  });
+
+  it('marks a published comment as moderated', async () => {
+    const result = await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+    expect(result).toMatchObject({ success: true, approved: true, heldForReview: false, unmoderated: false });
+  });
+
+  describe('revision tokens', () => {
+    it('returns the token with an unpublished comment, so the form can send it back', async () => {
+      analyzeCommentMock.mockResolvedValue({ ...HELD, revisionToken: TOKEN });
+
+      const result = await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+      expect(result).toMatchObject({ success: false, approved: false, revisionToken: TOKEN });
+    });
+
+    it('passes a resubmitted token on to the analysis', async () => {
+      await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi', revisionToken: TOKEN }, freshClient());
+
+      expect(analyzeCommentMock).toHaveBeenCalledWith('Hi', POST_SLUG, { replyToComment: undefined, revisionToken: TOKEN });
+    });
+
+    it('passes no token on when the form sent none', async () => {
+      await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+      expect(analyzeCommentMock).toHaveBeenCalledWith('Hi', POST_SLUG, { replyToComment: undefined });
+      expect(analyzeCommentMock.mock.calls[0]?.[2]).not.toHaveProperty('revisionToken');
+    });
+
+    it('does not return a token with a published comment', async () => {
+      analyzeCommentMock.mockResolvedValue({ ...APPROVED, revisionToken: TOKEN });
+
+      const result = await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+      expect(result.success).toBe(true);
+      expect(result).not.toHaveProperty('revisionToken');
+    });
+  });
+
+  describe('when the free plan is used up', () => {
+    it('publishes the comment unmoderated and says so in the result', async () => {
+      analyzeCommentMock.mockResolvedValue(UNMODERATED);
+
+      const result = await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+      expect(result).toEqual({
+        success: true,
+        approved: true,
+        heldForReview: false,
+        feedback: 'APPROVED',
+        score: 0.7,
+        message: 'Comment published successfully!',
+        unmoderated: true,
+      });
+      const [stored] = await store.listApproved(POST_SLUG);
+      expect(stored).toMatchObject({ author: 'Ada', content: 'Hi' });
+      expect(await store.findById(stored?.id ?? 0)).toMatchObject({ approved: true });
+    });
+
+    it('tells the commenter nothing about the plan', async () => {
+      analyzeCommentMock.mockResolvedValue(UNMODERATED);
+
+      const result = await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+      expect(JSON.stringify(result)).not.toContain(UPGRADE_URL);
+      expect(JSON.stringify(result)).not.toContain('free');
+    });
+  });
+
+  describe('when the comment has used all of its attempts', () => {
+    it('stores it unapproved for the site owner and thanks the commenter', async () => {
+      analyzeCommentMock.mockResolvedValue(FOR_REVIEW);
+
+      const result = await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+      expect(result).toEqual({
+        success: true,
+        approved: false,
+        heldForReview: true,
+        message: 'Thanks, your comment has been sent to the moderators for review.',
+      });
+      expect(await store.listApproved(POST_SLUG)).toEqual([]);
+      expect(await store.findById(1)).toMatchObject({ author: 'Ada', content: 'Hi', approved: false });
+    });
+
+    it('calls onHeldForReview with the stored comment', async () => {
+      analyzeCommentMock.mockResolvedValue(FOR_REVIEW);
+      const onHeldForReview = vi.fn();
+      setTestRuntime({ store, onHeldForReview });
+
+      await submitComment(
+        { postSlug: POST_SLUG, author: 'Ada', email: 'ada@example.com', content: 'Hi' },
+        freshClient(),
+      );
+
+      expect(onHeldForReview).toHaveBeenCalledTimes(1);
+      expect(onHeldForReview).toHaveBeenCalledWith({
+        reason: 'revision_limit_reached',
+        comment: expect.objectContaining({ id: 1, author: 'Ada', email: 'ada@example.com', content: 'Hi', approved: false }),
+      });
+    });
+
+    it('still holds the comment when onHeldForReview fails', async () => {
+      analyzeCommentMock.mockResolvedValue(FOR_REVIEW);
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      setTestRuntime({
+        store,
+        onHeldForReview: async () => {
+          throw new Error('mail server down');
+        },
+      });
+
+      const result = await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Hi' }, freshClient());
+
+      expect(result).toMatchObject({ success: true, heldForReview: true });
+      expect(await store.findById(1)).toMatchObject({ approved: false });
+    });
+
+    it('stores a held reply under its parent', async () => {
+      const parent = await store.create({ postSlug: POST_SLUG, author: 'Bo', content: 'Parent', approved: true });
+      analyzeCommentMock.mockResolvedValue(FOR_REVIEW);
+
+      await submitComment({ postSlug: POST_SLUG, author: 'Ada', content: 'Reply', parentId: parent.id }, freshClient());
+
+      expect(await store.findById(parent.id + 1)).toMatchObject({ parentId: parent.id, approved: false });
+    });
   });
 
   it("stores a reply and sends the parent's text as the comment it replies to", async () => {

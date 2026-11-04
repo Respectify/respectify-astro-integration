@@ -13,6 +13,9 @@ const { postSlug } = Astro.props;
   </p>
 
   <form class="rf-comments__form" data-post-slug={postSlug} id="rf-comment-form">
+    <!-- On the free plan, the token the last unpublished submission returned; resent so a revision is not counted as a new comment -->
+    <input id="rf-revision-token" name="revisionToken" type="hidden" value="" />
+
     <div class="rf-comments__field">
       <label class="rf-comments__label" for="rf-author">
         Name <span class="rf-comments__required">*</span>
@@ -58,8 +61,9 @@ const { postSlug } = Astro.props;
   const messageEl = document.getElementById('rf-form-message');
   const submitButton = document.getElementById('rf-submit-button') as HTMLButtonElement | null;
   const buttonText = document.getElementById('rf-button-text');
+  const revisionTokenInput = document.getElementById('rf-revision-token') as HTMLInputElement | null;
 
-  if (form && messageEl && submitButton && buttonText) {
+  if (form && messageEl && submitButton && buttonText && revisionTokenInput) {
     const postSlug = form.dataset.postSlug || '';
 
     form.addEventListener('submit', async (e) => {
@@ -70,6 +74,7 @@ const { postSlug } = Astro.props;
       buttonText.textContent = 'Analyzing with Respectify AI...';
 
       const formData = new FormData(form);
+      const revisionToken = revisionTokenInput.value || undefined;
 
       try {
         const { data, error } = await actions.comments.submit({
@@ -77,6 +82,7 @@ const { postSlug } = Astro.props;
           author: formData.get('author') as string,
           email: (formData.get('email') as string) || undefined,
           content: formData.get('content') as string,
+          ...(revisionToken ? { revisionToken } : {}),
         });
 
         messageEl.classList.remove('rf-comments__hidden', 'rf-comments__message--success', 'rf-comments__message--warning', 'rf-comments__message--error');
@@ -93,12 +99,24 @@ const { postSlug } = Astro.props;
           messageEl.classList.add('rf-comments__message--success');
           messageEl.appendChild(createTextDiv(`✓ ${data.message}`, 'rf-comments__message-title'));
           messageEl.appendChild(createTextDiv(data.feedback, 'rf-comments__message-body'));
-          if (data.score !== undefined) {
+          // An unmoderated comment has no real score to show
+          if (data.score !== undefined && !data.unmoderated) {
             messageEl.appendChild(createTextDiv(`Respectfulness score: ${(data.score * 100).toFixed(0)}%`, 'rf-comments__message-score'));
           }
           form.reset();
-          window.dispatchEvent(new CustomEvent('respectify:comment-published', { detail: { postSlug } }));
+          revisionTokenInput.value = '';
+          window.dispatchEvent(
+            new CustomEvent('respectify:comment-published', { detail: { postSlug, unmoderated: data.unmoderated } }),
+          );
+        } else if (data.heldForReview) {
+          messageEl.classList.add('rf-comments__message--success');
+          messageEl.appendChild(createTextDiv(`✓ ${data.message}`, 'rf-comments__message-title'));
+          form.reset();
+          revisionTokenInput.value = '';
+          window.dispatchEvent(new CustomEvent('respectify:comment-held', { detail: { postSlug } }));
         } else {
+          // Keep the token for the revised resubmission; it belongs to this comment only
+          revisionTokenInput.value = data.revisionToken ?? '';
           messageEl.classList.add('rf-comments__message--warning');
           messageEl.appendChild(createTextDiv('Comment needs improvement', 'rf-comments__message-title'));
           messageEl.appendChild(createTextDiv(data.feedback || 'Your comment did not meet our respectfulness standards.', 'rf-comments__message-body'));
