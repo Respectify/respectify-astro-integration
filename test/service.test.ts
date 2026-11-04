@@ -1,10 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RespectifyConfig } from '../src/lib/config';
 import type { analyzeComment as AnalyzeComment } from '../src/lib/service';
-import type { ResolvedIntegrationOptions } from '../src/types';
+import type { ResolvedIntegrationOptions, RespectifyRuntime } from '../src/types';
 import { baseConfig, createConfigFileDirectory } from './helpers/config-file';
 import {
   FAKE_ARTICLE_ID,
+  FREE_PLAN_ERRORS,
   commentScore,
   installFakeRespectifyApi,
   megacallResult,
@@ -13,6 +14,9 @@ import {
 
 const POST_SLUG = 'a-post';
 const COMMENT = 'A comment on the post.';
+const REVISION_TOKEN_HEADER = 'X-Respectify-Revision-Token';
+const TOKEN = 'a'.repeat(43);
+const UPGRADE_URL = 'https://respectify.ai/dashboard/billing';
 
 const configFiles = createConfigFileDirectory();
 let api: FakeRespectifyApi;
@@ -28,11 +32,12 @@ beforeEach(() => {
 /**
  * Load a fresh copy of the service against this config, so the client and article-ID caches
  * from earlier tests cannot leak in. Topic context comes from getPostContent, which keeps the
- * tests independent of the site URL.
+ * tests independent of the site URL. `runtime` adds to (or overrides) the test runtime module.
  */
 async function loadAnalyzeComment(
   config: RespectifyConfig,
   integrationOptions: Partial<ResolvedIntegrationOptions> = {},
+  runtime: Partial<RespectifyRuntime> = {},
 ): Promise<typeof AnalyzeComment> {
   vi.resetModules();
   const [{ setTestIntegrationOptions }, { setTestRuntime }, { createInMemoryCommentStore }] = await Promise.all([
@@ -44,6 +49,7 @@ async function loadAnalyzeComment(
   setTestRuntime({
     store: createInMemoryCommentStore(),
     getPostContent: async () => 'The post the comments are about.',
+    ...runtime,
   });
   const service = await import('../src/lib/service');
   return service.analyzeComment;
@@ -509,5 +515,196 @@ describe('suspected spam', () => {
 
     expect(result.approved).toBe(true);
     expect(result.suspectedSpam).toBe(false);
+  });
+});
+
+describe('revision tokens', () => {
+  const acceptableScore = commentScore({ toxicity_score: 0, exceeds_tolerance: false });
+
+  it('returns the token from the response header with an approved comment', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(megacallResult({ comment_score: acceptableScore }), { [REVISION_TOKEN_HEADER]: TOKEN });
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(true);
+    expect(result.revisionToken).toBe(TOKEN);
+  });
+
+  it('returns the token with a comment sent back for revision', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(
+      megacallResult({ comment_score: commentScore({ toxicity_score: 0.4, exceeds_tolerance: true }) }),
+      { [REVISION_TOKEN_HEADER]: TOKEN },
+    );
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.revisionToken).toBe(TOKEN);
+  });
+
+  it('returns the token with a rejection that short-circuits, such as spam', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(
+      megacallResult({ spam_check: { is_spam: true, confidence: 0.95, reasoning: 'Link farm.' } }),
+      { [REVISION_TOKEN_HEADER]: TOKEN },
+    );
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.isSpam).toBe(true);
+    expect(result.revisionToken).toBe(TOKEN);
+  });
+
+  it('has no token when the API sends no header (paid account)', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(megacallResult({ comment_score: acceptableScore }));
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result).not.toHaveProperty('revisionToken');
+  });
+
+  it('sends a resubmitted token back in the request header', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(megacallResult({ comment_score: acceptableScore }));
+
+    await analyzeComment(COMMENT, POST_SLUG, { revisionToken: TOKEN });
+
+    const [headers] = api.megacallRequestHeaders();
+    expect(headers?.[REVISION_TOKEN_HEADER.toLowerCase()]).toBe(TOKEN);
+  });
+
+  it('sends no token header when none was given', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.respondToMegacallWith(megacallResult({ comment_score: acceptableScore }));
+
+    await analyzeComment(COMMENT, POST_SLUG);
+
+    const [headers] = api.megacallRequestHeaders();
+    expect(headers).not.toHaveProperty(REVISION_TOKEN_HEADER.toLowerCase());
+  });
+});
+
+describe('when the free plan is used up', () => {
+  it('approves the comment unmoderated and says why', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.failMegacallWith(402, FREE_PLAN_ERRORS.allowanceExhausted(UPGRADE_URL));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(true);
+    expect(result.feedback).toBe('APPROVED');
+    expect(result.moderationSkipped).toEqual({ reason: 'free_allowance_exhausted', upgradeUrl: UPGRADE_URL });
+    expect(result.heldForReview).toBeUndefined();
+  });
+
+  it('logs the upgrade URL at error level for the site owner', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.failMegacallWith(402, FREE_PLAN_ERRORS.allowanceExhausted(UPGRADE_URL));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await analyzeComment(COMMENT, POST_SLUG);
+
+    const logged = consoleError.mock.calls.map((call) => JSON.stringify(call)).join('\n');
+    expect(logged).toContain('moderation stopped');
+    expect(logged).toContain(UPGRADE_URL);
+  });
+
+  it('calls onModerationStopped with the reason, upgrade URL, message and post', async () => {
+    const onModerationStopped = vi.fn();
+    const analyzeComment = await loadAnalyzeComment(baseConfig(), {}, { onModerationStopped });
+    api.failMegacallWith(402, FREE_PLAN_ERRORS.allowanceExhausted(UPGRADE_URL));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(onModerationStopped).toHaveBeenCalledTimes(1);
+    expect(onModerationStopped).toHaveBeenCalledWith({
+      reason: 'free_allowance_exhausted',
+      upgradeUrl: UPGRADE_URL,
+      message: expect.stringContaining(UPGRADE_URL),
+      postSlug: POST_SLUG,
+    });
+  });
+
+  it('still approves the comment when onModerationStopped fails', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig(), {}, {
+      onModerationStopped: async () => {
+        throw new Error('webhook down');
+      },
+    });
+    api.failMegacallWith(402, FREE_PLAN_ERRORS.allowanceExhausted(UPGRADE_URL));
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(true);
+    expect(result.moderationSkipped?.reason).toBe('free_allowance_exhausted');
+  });
+
+  it('keeps the insufficient-balance 402 (no error_code) fail-closed, as before', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.failMegacallWith(402, FREE_PLAN_ERRORS.insufficientBalance());
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.feedback).toContain('temporarily unavailable');
+    expect(result.moderationSkipped).toBeUndefined();
+  });
+});
+
+describe('when a comment has used all of its attempts', () => {
+  it('holds the comment for review instead of rejecting it', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.failMegacallWith(409, FREE_PLAN_ERRORS.revisionLimitReached());
+
+    const result = await analyzeComment(COMMENT, POST_SLUG, { revisionToken: TOKEN });
+
+    expect(result.approved).toBe(false);
+    expect(result.heldForReview).toBe(true);
+    expect(result.feedback).toBe('Thanks, your comment has been sent to the moderators for review.');
+    expect(result.moderationSkipped).toBeUndefined();
+  });
+
+  it('keeps any other 409 fail-closed, as before', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.failMegacallWith(409, { error: 'Conflict', message: 'Something clashed.', code: 409 });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.heldForReview).toBeUndefined();
+    expect(result.feedback).toContain('temporarily unavailable');
+  });
+});
+
+describe('other API errors keep failing closed', () => {
+  it('rate limiting (429) rejects with the unavailable message', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.failMegacallWith(429, FREE_PLAN_ERRORS.rateLimited(), { 'Retry-After': '42' });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.feedback).toContain('temporarily unavailable');
+    expect(JSON.stringify(consoleError.mock.calls)).toContain('"retryAfterSeconds":42');
+  });
+
+  it('a server error (500) rejects with the unavailable message', async () => {
+    const analyzeComment = await loadAnalyzeComment(baseConfig());
+    api.failMegacallWith(500, { error: 'Internal Server Error', message: 'Oops.', code: 500 });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const result = await analyzeComment(COMMENT, POST_SLUG);
+
+    expect(result.approved).toBe(false);
+    expect(result.feedback).toContain('temporarily unavailable');
   });
 });

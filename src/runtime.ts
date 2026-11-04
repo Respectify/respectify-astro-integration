@@ -24,5 +24,7 @@ export function getRespectifyRuntime(): ResolvedRespectifyRuntime {
     store: runtime.store,
     getPostUrl: runtime.getPostUrl ?? defaultGetPostUrl,
     getPostContent: runtime.getPostContent,
+    onModerationStopped: runtime.onModerationStopped,
+    onHeldForReview: runtime.onHeldForReview,
   };
 }

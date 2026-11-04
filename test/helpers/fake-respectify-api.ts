@@ -55,20 +55,67 @@ export function megacallResult(overrides: Partial<WireMegaCallResult> = {}): Wir
   };
 }
 
+/** How the fake answers megacall: a result (with optional response headers), or an HTTP error. */
+type MegacallAnswer =
+  | { kind: 'result'; result: WireMegaCallResult; headers: Record<string, string> }
+  | { kind: 'error'; status: number; body: object; headers: Record<string, string> };
+
 /** Records the megacall requests the client sends, and answers each with the configured result. */
 export interface FakeRespectifyApi {
-  respondToMegacallWith: (result: WireMegaCallResult) => void;
+  /** Answer megacall with this result, optionally adding response headers such as the revision token */
+  respondToMegacallWith: (result: WireMegaCallResult, headers?: Record<string, string>) => void;
+  /** Answer megacall with this HTTP error, optionally adding response headers such as Retry-After */
+  failMegacallWith: (status: number, body: object, headers?: Record<string, string>) => void;
   megacallRequests: () => MegacallRequestBody[];
+  /** The request headers of each megacall, in order */
+  megacallRequestHeaders: () => Record<string, string>[];
   requestedEndpoints: () => string[];
 }
+
+/** Error bodies the API sends on the free plan, as the backend contract defines them. */
+export const FREE_PLAN_ERRORS = {
+  allowanceExhausted: (upgradeUrl = 'https://respectify.ai/dashboard/billing') => ({
+    error: 'Free comment allowance used up',
+    message: `Your free plan's 200 comments are used up. Add credit at ${upgradeUrl} to continue.`,
+    code: 402,
+    error_code: 'free_allowance_exhausted',
+    upgrade_url: upgradeUrl,
+  }),
+  revisionLimitReached: () => ({
+    error: 'Revision limit reached',
+    message: 'This comment has used all 5 of its attempts.',
+    code: 409,
+    error_code: 'revision_limit_reached',
+  }),
+  rateLimited: () => ({
+    error: 'Too Many Requests',
+    message: 'Free plan keys are limited per minute.',
+    code: 429,
+    error_code: 'free_rate_limited',
+  }),
+  insufficientBalance: () => ({
+    error: 'Payment Required',
+    message: 'Your balance is too low for this request.',
+    code: 402,
+  }),
+} as const;
 
 function requestUrl(input: string | URL | Request): string {
   if (input instanceof Request) return input.url;
   return input.toString();
 }
 
-function jsonResponse(body: object): Response {
-  return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+function jsonResponse(body: object, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
+}
+
+/** The request headers as a plain record, whichever form the client passed them in. */
+function headersOf(init: RequestInit | undefined): Record<string, string> {
+  const record: Record<string, string> = {};
+  new Headers(init?.headers).forEach((value, name) => {
+    record[name.toLowerCase()] = value;
+  });
+  return record;
 }
 
 /**
@@ -77,8 +124,9 @@ function jsonResponse(body: object): Response {
  * Any endpoint other than inittopic and megacall fails the test.
  */
 export function installFakeRespectifyApi(): FakeRespectifyApi {
-  let megacallResponse: WireMegaCallResult = megacallResult();
+  let megacallAnswer: MegacallAnswer = { kind: 'result', result: megacallResult(), headers: {} };
   const megacallBodies: MegacallRequestBody[] = [];
+  const megacallHeaders: Record<string, string>[] = [];
   const endpoints: string[] = [];
 
   const fakeFetch = vi.fn<typeof fetch>(async (input, init) => {
@@ -92,7 +140,10 @@ export function installFakeRespectifyApi(): FakeRespectifyApi {
     if (endpoint === 'megacall') {
       const rawBody = typeof init?.body === 'string' ? init.body : '';
       megacallBodies.push(MegacallRequestBodySchema.parse(JSON.parse(rawBody)));
-      return jsonResponse(megacallResponse);
+      megacallHeaders.push(headersOf(init));
+      return megacallAnswer.kind === 'result'
+        ? jsonResponse(megacallAnswer.result, 200, megacallAnswer.headers)
+        : jsonResponse(megacallAnswer.body, megacallAnswer.status, megacallAnswer.headers);
     }
     throw new Error(`Unexpected Respectify request in test: ${url}`);
   });
@@ -100,10 +151,14 @@ export function installFakeRespectifyApi(): FakeRespectifyApi {
   vi.stubGlobal('fetch', fakeFetch);
 
   return {
-    respondToMegacallWith: (result) => {
-      megacallResponse = result;
+    respondToMegacallWith: (result, headers = {}) => {
+      megacallAnswer = { kind: 'result', result, headers };
+    },
+    failMegacallWith: (status, body, headers = {}) => {
+      megacallAnswer = { kind: 'error', status, body, headers };
     },
     megacallRequests: () => [...megacallBodies],
+    megacallRequestHeaders: () => megacallHeaders.map((headers) => ({ ...headers })),
     requestedEndpoints: () => [...endpoints],
   };
 }

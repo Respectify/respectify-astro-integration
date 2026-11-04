@@ -4,13 +4,17 @@ import { RESPECTIFY_API_KEY, RESPECTIFY_EMAIL } from 'astro:env/server';
 import {
   RespectifyClient,
   AuthenticationError,
+  FreeAllowanceExhaustedError,
   PaymentRequiredError,
+  RateLimitedError,
   RespectifyError,
+  RevisionLimitReachedError,
   type MegacallOptions,
   type MegaCallResult,
 } from '@respectify/client';
 import { getRespectifyRuntime } from '../runtime';
 import { logger } from './logger';
+import { HELD_FOR_REVIEW_MESSAGE } from './messages';
 import type { AnalyzeCommentOptions, RespectifyAnalysisResult } from '../types';
 
 let client: RespectifyClient | null = null;
@@ -210,8 +214,16 @@ export async function analyzeComment(
       megacallOptions.tolerances = tolerances;
     }
 
-    const result = await respectifyClient.megacall(megacallOptions);
+    // A revised resubmission carries the token its previous analysis returned
+    if (options.revisionToken !== undefined) {
+      megacallOptions.revisionToken = options.revisionToken;
+    }
+
+    const { result, revisionToken } = await respectifyClient.megacallWithMeta(megacallOptions);
     const showFeedback = config.moderation.showFeedbackToUser !== false;
+    // Free-plan accounts get a token to send back with a revision; paid accounts get none
+    const tokenField: Pick<RespectifyAnalysisResult, 'revisionToken'> =
+      revisionToken === undefined ? {} : { revisionToken };
 
     if (result.spam_check?.is_spam) {
       return {
@@ -221,6 +233,7 @@ export async function analyzeComment(
         isSpam: true,
         suspectedSpam: false,
         spamConfidence: result.spam_check.confidence,
+        ...tokenField,
       };
     }
 
@@ -246,6 +259,7 @@ export async function analyzeComment(
           feedback: config.feedback.offTopic ?? 'This comment appears to be off-topic.',
           suggestion: showFeedback ? on_topic.reasoning || banned_topics.reasoning : undefined,
           ...spamFields,
+          ...tokenField,
         };
       }
     }
@@ -258,6 +272,7 @@ export async function analyzeComment(
         feedback: config.feedback.dogwhistle ?? 'This comment was blocked due to policy violations.',
         suggestion: showFeedback ? result.dogwhistle_check.detection.reasoning : undefined,
         ...spamFields,
+        ...tokenField,
       };
     }
 
@@ -279,6 +294,7 @@ export async function analyzeComment(
       approved,
       feedback,
       ...spamFields,
+      ...tokenField,
     };
     if (exceedsTolerance !== undefined) analysisResult.exceedsTolerance = exceedsTolerance;
     if (result.comment_score?.health_score !== undefined) analysisResult.healthScore = result.comment_score.health_score;
@@ -289,10 +305,31 @@ export async function analyzeComment(
 
     return analysisResult;
   } catch (error) {
+    if (error instanceof FreeAllowanceExhaustedError) {
+      return publishUnmoderated(config, error, postSlug);
+    }
+
+    if (error instanceof RevisionLimitReachedError) {
+      // The comment cannot be revised again through the API: a person decides instead
+      logger.info('Respectify revision limit reached; holding the comment for review', { postSlug });
+      return {
+        score: 0,
+        approved: false,
+        heldForReview: true,
+        feedback: HELD_FOR_REVIEW_MESSAGE,
+      };
+    }
+
     if (error instanceof AuthenticationError) {
       logger.error('Respectify authentication failed', { error });
     } else if (error instanceof PaymentRequiredError) {
       logger.error('Respectify subscription required', { error });
+    } else if (error instanceof RateLimitedError) {
+      logger.error('Respectify rate limit reached', {
+        errorCode: error.errorCode,
+        retryAfterSeconds: error.retryAfterSeconds,
+        message: error.message,
+      });
     } else if (error instanceof RespectifyError) {
       logger.error('Respectify API error', { statusCode: error.statusCode, message: error.message });
     } else {
@@ -305,4 +342,42 @@ export async function analyzeComment(
       feedback: 'Comment analysis service is temporarily unavailable. Please try again later.',
     };
   }
+}
+
+/**
+ * The account's free plan is used up, so Respectify no longer assesses comments. The comment
+ * is approved as it is (the commenter sees the ordinary approval), and the site owner is told
+ * through the log and the runtime's `onModerationStopped`.
+ */
+async function publishUnmoderated(
+  config: RespectifyConfig,
+  error: FreeAllowanceExhaustedError,
+  postSlug: string | undefined,
+): Promise<RespectifyAnalysisResult> {
+  logger.error('Respectify moderation stopped: the free plan is used up. Comments are being published unmoderated.', {
+    upgradeUrl: error.upgradeUrl,
+    message: error.message,
+    postSlug,
+  });
+
+  const { onModerationStopped } = getRespectifyRuntime();
+  if (onModerationStopped) {
+    try {
+      await onModerationStopped({
+        reason: 'free_allowance_exhausted',
+        upgradeUrl: error.upgradeUrl,
+        message: error.message,
+        postSlug,
+      });
+    } catch (callbackError) {
+      logger.error('onModerationStopped failed', { error: callbackError });
+    }
+  }
+
+  return {
+    score: config.thresholds.autoApprove,
+    approved: true,
+    feedback: config.feedback.approved,
+    moderationSkipped: { reason: 'free_allowance_exhausted', upgradeUrl: error.upgradeUrl },
+  };
 }

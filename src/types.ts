@@ -4,7 +4,7 @@ import type {
   ModerationTolerances,
   RespectifyClientOptions,
 } from '@respectify/client';
-import type { ICommentStore } from './store/types';
+import type { CommentRecord, ICommentStore } from './store/types';
 
 /**
  * Options forwarded to `RespectifyClient`.
@@ -106,11 +106,63 @@ export interface RespectifyRuntime {
    * `getPostUrl` for topic initialization when provided.
    */
   getPostContent?: (slug: string) => string | Promise<string>;
+
+  /**
+   * Called when Respectify stops moderating because the account's free plan is used up.
+   * From then on comments are published unmoderated, so tell yourself: email, Slack, a
+   * dashboard flag. Called once per affected comment. Commenters are never told. The event
+   * is also logged at error level whether or not this is set.
+   */
+  onModerationStopped?: (event: ModerationStoppedEvent) => void | Promise<void>;
+
+  /**
+   * Called when a comment is stored for you to review instead of being published or
+   * rejected: on the free plan, a comment that has used all five of its attempts. The
+   * comment is in your store with `approved: false`; set `approved` to true to publish it,
+   * or delete it.
+   */
+  onHeldForReview?: (event: HeldForReviewEvent) => void | Promise<void>;
+}
+
+/** Why moderation stopped. Only the free plan can run out today. */
+export type ModerationStoppedReason = 'free_allowance_exhausted';
+
+/** What `onModerationStopped` receives. */
+export interface ModerationStoppedEvent {
+  reason: ModerationStoppedReason;
+  /** Where to add credit so moderation resumes */
+  upgradeUrl: string;
+  /** The API's own message, which already names the upgrade URL */
+  message: string;
+  /** The post the unmoderated comment was published on */
+  postSlug: string | undefined;
+}
+
+/** Why a comment was held rather than published or rejected. */
+export type HeldForReviewReason = 'revision_limit_reached';
+
+/** What `onHeldForReview` receives. */
+export interface HeldForReviewEvent {
+  reason: HeldForReviewReason;
+  /** The stored comment, with `approved: false` */
+  comment: CommentRecord;
 }
 
 export interface AnalyzeCommentOptions {
   /** Parent comment text when submitting a reply */
   replyToComment?: string;
+  /**
+   * The revision token the previous analysis of this same comment returned, when the
+   * commenter is resubmitting a revised version (see `RespectifyAnalysisResult.revisionToken`).
+   */
+  revisionToken?: string;
+}
+
+/** Moderation did not run on this comment; it was published as it was. */
+export interface ModerationSkipped {
+  reason: ModerationStoppedReason;
+  /** Where to add credit so moderation resumes */
+  upgradeUrl: string;
 }
 
 export interface RespectifyAnalysisResult {
@@ -118,6 +170,23 @@ export interface RespectifyAnalysisResult {
   approved: boolean;
   feedback: string;
   suggestion?: string;
+  /**
+   * Set when the comment went through unmoderated because the account's free plan is used
+   * up. `approved` is true: publish it as it is, and tell the site owner, never the commenter.
+   */
+  moderationSkipped?: ModerationSkipped;
+  /**
+   * True when the comment should be stored unpublished for the site owner to review, rather
+   * than rejected: on the free plan, when it has used all five of its attempts. `approved`
+   * is false.
+   */
+  heldForReview?: boolean;
+  /**
+   * On the free plan, the token to send back (as `AnalyzeCommentOptions.revisionToken`) if the
+   * commenter revises this comment, so the revision is not counted as a new comment. Absent
+   * for paid accounts.
+   */
+  revisionToken?: string;
   /** True when the comment is spam: it is rejected */
   isSpam?: boolean;
   spamConfidence?: number;

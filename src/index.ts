@@ -109,6 +109,11 @@ export type {
   RespectifyClientConfig,
   RespectifyMegacallConfig,
   AnalyzeCommentOptions,
+  ModerationSkipped,
+  ModerationStoppedEvent,
+  ModerationStoppedReason,
+  HeldForReviewEvent,
+  HeldForReviewReason,
 } from './types';
 export type { ICommentStore, CommentRecord, NewComment, PublicComment } from './store/types';
 export { CommentValidationError, newCommentSchema } from './store/schemas';

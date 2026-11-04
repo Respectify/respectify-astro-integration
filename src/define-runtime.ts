@@ -19,5 +19,5 @@ export function defineRespectifyRuntime(runtime: RespectifyRuntime): RespectifyR
   return runtime;
 }
 
-export type { RespectifyRuntime } from './types';
+export type { RespectifyRuntime, ModerationStoppedEvent, HeldForReviewEvent } from './types';
 export type { ICommentStore, CommentRecord, NewComment, PublicComment } from './store/types';
