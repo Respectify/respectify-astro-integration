@@ -84,7 +84,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
     "@libsql/client": "^0.18.0",
-    "@respectify/client": "file:vendor/respectify-client-0.8.0.tgz",
+    "@respectify/client": "^0.8.0",
     "astro": "^6.0.4",
     "drizzle-kit": "^0.31.11",
     "drizzle-orm": "^0.45.4",
