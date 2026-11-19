@@ -34,6 +34,81 @@ Built for production — powers [nickhodges.com](https://nickhodges.com) as a li
 
 ## Quick start
 
+### 1. Add the integration
+
+```bash
+npx astro add @respectify/astro
+```
+
+This installs the package and adds `respectify()` to your `astro.config`. Comments are saved by your server, so the site also needs a server adapter; if it has none yet, add one the same way, for example `npx astro add node` (or `vercel`, `netlify`, `cloudflare`).
+
+### 2. Run init
+
+```bash
+npx @respectify/astro init
+```
+
+It asks which database your comments go in (or pass `--database postgres` or `--database sqlite`; a project with a `drizzle.config` is not asked) and writes what the integration needs:
+
+| File | What it is |
+| --- | --- |
+| `src/respectify.runtime.ts` | The runtime module: connects to your database and creates the comment store |
+| `respectify.config.json` | Moderation settings, with the defaults |
+| `src/actions/index.ts` | Astro Actions exposing the comment actions |
+| `src/db/schema.ts` | A Drizzle schema with the comment table |
+| `drizzle.config.ts` | A drizzle-kit config for creating the table |
+
+A file that already exists is never overwritten. If you already use Drizzle, your own `drizzle.config` is kept and the comment table is added as one line at the end of the schema file it names. Where `init` cannot safely make a change itself, such as a site that already has actions or a schema split over several files, it prints the lines for you to add. It finishes with a numbered list of what is left, which is steps 3 to 6 below with anything you have already done left out.
+
+### 3. Install the database packages
+
+`init` prints the exact command for your package manager and whatever is missing. For Postgres:
+
+```bash
+npm install @respectify/client drizzle-orm pg
+npm install -D drizzle-kit @types/pg
+```
+
+For SQLite (libSQL or Turso):
+
+```bash
+npm install @respectify/client drizzle-orm @libsql/client
+npm install -D drizzle-kit
+```
+
+### 4. Set your environment variables
+
+```env
+RESPECTIFY_EMAIL=you@example.com
+RESPECTIFY_API_KEY=your-api-key
+DATABASE_URL=postgres://...
+```
+
+For SQLite, `DATABASE_URL` is `file:local.db` or your `libsql://` URL, and a hosted database such as Turso also needs `DATABASE_AUTH_TOKEN`.
+
+### 5. Create the comment table
+
+```bash
+npx drizzle-kit generate
+npx drizzle-kit migrate
+```
+
+### 6. Add comments to your layout
+
+```astro
+---
+import CommentSection from '@respectify/astro/components/CommentSection.astro';
+---
+
+<CommentSection postSlug={post.id} />
+```
+
+That's it. Comments are moderated by Respectify before they appear.
+
+## Manual setup
+
+Everything `init` and `astro add` do can be done by hand. These are the same steps, written out.
+
 ### 1. Install
 
 Install the package, Drizzle, and the driver for your database. For Postgres with node-postgres:
@@ -106,13 +181,13 @@ export default defineConfig({
       DATABASE_URL: envField.string({ context: 'server', access: 'secret' }),
     },
   },
-  integrations: [
-    respectify({
-      runtime: './src/respectify.runtime.ts',
-    }),
-  ],
+  integrations: [respectify()],
 });
 ```
+
+`respectify()` loads the runtime module from `./src/respectify.runtime.ts`. If yours is somewhere else, say where: `respectify({ runtime: './src/lib/comments.runtime.ts' })`.
+
+The `env.schema` entry is for the runtime module above, which imports `DATABASE_URL` from `astro:env/server`. The module `init` writes reads it with `getSecret('DATABASE_URL')`, which needs no schema entry.
 
 ### 5. Configure Respectify
 
@@ -156,8 +231,6 @@ import CommentSection from '@respectify/astro/components/CommentSection.astro';
 
 <CommentSection postSlug={post.id} />
 ```
-
-That's it. Comments are moderated by Respectify before they appear.
 
 ## Storage
 
@@ -225,7 +298,7 @@ Override on `.rf-comments`:
 
 ```ts
 respectify({
-  // Required: the module whose default export is defineRespectifyRuntime({ store, ... })
+  // The module whose default export is defineRespectifyRuntime({ store, ... }). This is the default.
   runtime: './src/respectify.runtime.ts',
 
   configPath: './respectify.config.json',
