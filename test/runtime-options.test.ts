@@ -73,6 +73,16 @@ describe('integration options reach the server bundle', () => {
     });
   });
 
+  it('looks for the runtime module at src/respectify.runtime.ts when given no options, as astro add writes it', async () => {
+    vi.resetModules();
+    const { default: respectify } = await import('../src/index');
+    const plugins = await runSetup(respectify());
+
+    const source = await loadVirtualModule(plugins, 'virtual:@respectify/astro/runtime');
+
+    expect(source).toContain('/project/src/respectify.runtime.ts');
+  });
+
   it("points the runtime virtual module at the site's runtime file, resolved from the project root", async () => {
     vi.resetModules();
     const { default: respectify } = await import('../src/index');

@@ -51,9 +51,10 @@ function createVirtualModulesPlugin(modules: Record<string, string>): VirtualMod
 /**
  * The Respectify comments integration. Its options are serialized into the server bundle,
  * so they must be plain data; the comment store and post functions live in the module
- * named by `runtime`.
+ * named by `runtime`. Every option has a default, so `astro add @respectify/astro` and
+ * `respectify-astro init` are enough to set a site up.
  */
-export default function respectify(userOptions: RespectifyIntegrationOptions): AstroIntegration {
+export default function respectify(userOptions: RespectifyIntegrationOptions = {}): AstroIntegration {
   const parsed = parseIntegrationOptions(userOptions);
   const resolvedOptions = toResolvedIntegrationOptions(parsed);
   const routePattern = resolvedOptions.commentsApiPath.replace(/^\//, '');

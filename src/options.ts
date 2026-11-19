@@ -9,6 +9,9 @@ import type {
 } from './types';
 
 /** The options the server bundle sees when `respectify()` is given only `runtime`. */
+/** Where the runtime module is looked for when `respectify()` is not told. `respectify-astro init` writes it there. */
+export const DEFAULT_RUNTIME_MODULE = './src/respectify.runtime.ts';
+
 export const DEFAULT_INTEGRATION_OPTIONS: ResolvedIntegrationOptions = {
   configPath: './respectify.config.json',
   commentsApiPath: '/api/respectify/comments',
@@ -53,7 +56,10 @@ const tolerancesSchema = z.custom<ModerationTolerances>().superRefine((tolerance
 });
 
 const integrationOptionsSchema = z.strictObject({
-  runtime: z.string().min(1, 'runtime must name the module that calls defineRespectifyRuntime()'),
+  runtime: z
+    .string()
+    .min(1, 'runtime must name the module that calls defineRespectifyRuntime()')
+    .default(DEFAULT_RUNTIME_MODULE),
   configPath: z.string().min(1).default(DEFAULT_INTEGRATION_OPTIONS.configPath),
   commentsApiPath: z
     .string()

@@ -35,8 +35,9 @@ export interface RespectifyIntegrationOptions {
   /**
    * The runtime module: a file whose default export is `defineRespectifyRuntime({ store, ... })`.
    * A relative path is resolved against the project root; a package specifier is left to Vite.
+   * Default: `./src/respectify.runtime.ts`, the file `respectify-astro init` writes.
    */
-  runtime: string;
+  runtime?: string;
 
   /** Path to respectify.config.json (default: ./respectify.config.json) */
   configPath?: string;
